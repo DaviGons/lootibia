@@ -68,14 +68,30 @@ imagens são GIF de **64×64** em `static.tibia.com`. Três coisas verificadas:
    normalmente (~150 ms). **Consequência: a URL vai crua para o `<img>` e o navegador busca.** Nada
    de `next/image`, cujo otimizador buscaria a imagem a partir do servidor e levaria 403.
 2. **O nome do Hunt Analyser não casa com o `race`.** O jogo escreve `betrayed wraith` e o race é
-   `wraith` — nenhuma slugificação do nome chega lá. O que casa é o **nome**, normalizando plural
-   dos dois lados: `betrayed wraith` ↔ `Betrayed Wraiths`.
-3. **Zero colisões** entre os 718 nomes depois de normalizados, o que autoriza usar a normalização
-   no lugar de uma tabela de de-para manual. Travado em `lib/tibiadata.test.ts` contra fixture.
+   `wraith` — nenhuma slugificação do nome chega lá. O que casa é o **nome**, desfeito o plural.
+3. **Não existe "a" regra de singular: `-ies` é ambíguo.**
+
+   | Plural (TibiaData) | Singular (jogo) |
+   |---|---|
+   | `Furies` | `Fury` |
+   | `Zombies` | `Zombie` |
+
+   Nenhuma regra acerta as duas, e foi exatamente isso que deixou "Fury" sem sprite na primeira
+   versão. A saída é não escolher: `variantesDeNome` gera todas as formas plausíveis, o índice
+   guarda a criatura sob cada uma e a busca tenta todas.
+
+   Irregulares que só o `race` resgata: `Cyclopes`→`cyclops`, `Medusae`→`medusa`,
+   `Sabreteeth`→`sabretooth`. Por isso o `race` também entra como chave.
+
+**Cobertura medida** contra os ~2.069 nomes singulares do TibiaWiki: **715 acham sprite** e **712
+das 718** criaturas ficam alcançáveis, com **zero colisões**. A regra única de plural achava 613.
+Os ~1.350 nomes restantes são bosses e bichos de evento que **não existem na biblioteca do
+tibia.com** — limite da fonte, não defeito do de-para. A tela mostra um marcador discreto no lugar
+do sprite nesses casos.
 
 Implementação: `lib/nomesDeCriatura.ts` (lógica pura) e `lib/tibiadata.ts` (cliente, com
-`'use cache'` + `cacheLife('days')`). Falha na API devolve mapa vazio: sprite é decoração e não
-pode derrubar a tela.
+`'use cache'` + `cacheLife('days')`). O índice tem ~2.600 chaves e ~190 KB, que ficam só no
+servidor. Falha na API devolve mapa vazio: sprite é decoração e não pode derrubar a tela.
 
 ### Armadilhas confirmadas
 

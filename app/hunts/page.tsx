@@ -8,8 +8,7 @@ import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { spritesDeCriaturas } from "@/lib/tibiadata";
-import { normalizarNomeDeCriatura } from "@/lib/nomesDeCriatura";
+import { spritesDeCriaturas, spriteDe } from "@/lib/tibiadata";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -261,13 +260,13 @@ async function Painel() {
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                    {sprites[normalizarNomeDeCriatura(m.nome)] && (
+                    {spriteDe(sprites, m.nome) ? (
                       // <img> de proposito, sem next/image: o static.tibia.com
                       // devolve 403 para quem nao e navegador, e a otimizacao de
                       // imagem da Vercel buscaria a partir do servidor.
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={sprites[normalizarNomeDeCriatura(m.nome)]}
+                        src={spriteDe(sprites, m.nome)}
                         alt=""
                         width={32}
                         height={32}
@@ -275,6 +274,17 @@ async function Painel() {
                         decoding="async"
                         className="max-h-8 w-auto opacity-90 transition-opacity duration-200 hover:opacity-100"
                       />
+                    ) : (
+                      // A biblioteca do tibia.com cobre ~718 criaturas; boss e
+                      // bicho de evento nao estao la. Marcador discreto, para
+                      // ler como "sem sprite" e nao como imagem quebrada.
+                      <span
+                        aria-hidden
+                        title="sem sprite na biblioteca do tibia.com"
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed text-[10px] uppercase text-muted-foreground/70"
+                      >
+                        {m.nome.slice(0, 1)}
+                      </span>
                     )}
                   </span>
                   <span className="truncate text-sm capitalize" title={m.nome}>

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { normalizarNomeDeCriatura } from "./nomesDeCriatura.ts";
+import { variantesDeNome, normalizarNomeDeCriatura } from "./nomesDeCriatura.ts";
 
 let falhas = 0;
 function ok(nome: string, real: unknown, esperado: unknown) {
@@ -18,52 +18,77 @@ interface Criatura {
 const lista: Criatura[] = JSON.parse(
   readFileSync("test/fixtures/tibiadata-creatures.json", "utf8"),
 );
+// Nomes de página do TibiaWiki: singulares, como o Hunt Analyser escreve.
+const nomesDoWiki: string[] = JSON.parse(
+  readFileSync("test/fixtures/tibiawiki-creature-names.json", "utf8"),
+);
 
-console.log("== normalizacao");
-ok("plural simples", normalizarNomeDeCriatura("Lost Souls"), "lost soul");
-ok("singular fica igual", normalizarNomeDeCriatura("lost soul"), "lost soul");
-ok("plural em -es", normalizarNomeDeCriatura("Witches"), "witch");
-ok("apostrofo sai", normalizarNomeDeCriatura("Ghazbaran's Guard"), "ghazbaran guard");
-ok("espacos extras somem", normalizarNomeDeCriatura("  Dark   Torturers "), "dark torturer");
+// Mesmo índice que lib/tibiadata.ts monta: cada criatura sob todas as suas
+// variantes e sob o `race`.
+const indice = new Map<string, Criatura>();
+const colisoes: string[] = [];
+function indexar(chave: string, c: Criatura) {
+  const ja = indice.get(chave);
+  if (ja && ja.name !== c.name) colisoes.push(`${chave}: ${ja.name} vs ${c.name}`);
+  else indice.set(chave, c);
+}
+for (const c of lista) {
+  for (const v of variantesDeNome(c.name)) indexar(v, c);
+  if (c.race) indexar(c.race, c);
+}
+const achar = (nome: string) => variantesDeNome(nome).map((v) => indice.get(v)).find(Boolean);
 
-console.log("\n== de-para com a lista real da TibiaData (fixture de 718 criaturas)");
-const porNome = new Map<string, Criatura>();
-for (const c of lista) porNome.set(normalizarNomeDeCriatura(c.name), c);
+console.log("== limpeza do nome");
+ok("minusculas e sem pontuacao", normalizarNomeDeCriatura("Ghazbaran's Guard"), "ghazbarans guard");
+// A forma canonica so limpa; quem desfaz o possessivo e a lista de variantes.
+ok("variante sem o -s do possessivo", variantesDeNome("Ghazbaran's Guard").includes("ghazbaran guard"), true);
+ok("espacos colapsados", normalizarNomeDeCriatura("  Dark   Torturers "), "dark torturers");
+ok("nome vazio nao gera variante", variantesDeNome("   "), []);
 
-ok("fixture tem 718 criaturas", lista.length, 718);
-// Se duas criaturas diferentes normalizassem para a mesma chave, o sprite
-// exibido poderia ser o do monstro errado. Zero colisao e o que autoriza
-// usar normalizacao no lugar de tabela de de-para manual.
-ok("nenhuma colisao apos normalizar", lista.length - porNome.size, 0);
+console.log("\n== o plural -ies e ambiguo: as duas leituras precisam existir");
+ok("furies gera fury", variantesDeNome("Furies").includes("fury"), true);
+ok("zombies gera zombie", variantesDeNome("Zombies").includes("zombie"), true);
+ok("variante sem espaco existe", variantesDeNome("Dark Torturers").includes("darktorturer"), true);
 
-console.log("\n== os mobs da sessao real casam com um sprite");
-// Nomes exatamente como o Hunt Analyser escreve: minusculo e singular.
-const doHuntAnalyser = [
+console.log("\n== casos que estavam quebrados na primeira versao");
+// "Fury" aparecia sem sprite porque a regra unica virava "furies" em "furi".
+for (const n of ["fury", "zombie", "hero", "cyclops", "medusa", "sabretooth", "witch", "wolf"]) {
+  ok(`${n} acha sprite`, Boolean(achar(n)), true);
+}
+
+console.log("\n== os mobs da sessao real continuam casando");
+for (const n of [
   "betrayed wraith",
   "dark torturer",
   "destroyer",
   "hand of cursed fate",
   "lost soul",
   "plaguesmith",
-];
-for (const n of doHuntAnalyser) {
-  const achou = porNome.get(normalizarNomeDeCriatura(n));
-  ok(`${n} tem sprite`, Boolean(achou?.image_url), true);
+]) {
+  ok(`${n} acha sprite`, Boolean(achar(n)), true);
 }
+// O caso que prova por que nao casamos por `race`: o de "betrayed wraith" e so
+// "wraith", que nenhuma slugificacao do nome produz.
+ok("betrayed wraith tem race 'wraith'", achar("betrayed wraith")?.race, "wraith");
 
-// O caso que prova por que casamos por NOME e nao por `race`: o race de
-// "betrayed wraith" e so "wraith", que nenhuma slugificacao do nome produz.
-const wraith = porNome.get(normalizarNomeDeCriatura("betrayed wraith"));
-ok("betrayed wraith tem race 'wraith', nao 'betrayedwraith'", wraith?.race, "wraith");
-ok(
-  "slugificar o nome NAO acharia o race",
-  "betrayed wraith".replace(/\s/g, "") === wraith?.race,
-  false,
-);
+console.log("\n== integridade do indice");
+ok("fixture tem 718 criaturas", lista.length, 718);
+// Uma chave apontando para duas criaturas exibiria o sprite do bicho errado.
+ok("nenhuma colisao", colisoes.length, 0);
+if (colisoes.length) console.log(colisoes.slice(0, 10).join("\n"));
+ok("nenhuma URL fora de static.tibia.com", lista.filter((c) => !c.image_url.startsWith("https://static.tibia.com/")).length, 0);
 
-console.log("\n== toda URL de sprite aponta para o dominio esperado");
-const fora = lista.filter((c) => !c.image_url.startsWith("https://static.tibia.com/"));
-ok("nenhuma URL fora de static.tibia.com", fora.length, 0);
+console.log("\n== cobertura medida contra os nomes singulares do TibiaWiki");
+const comSprite = nomesDoWiki.filter((n) => achar(n));
+const alcancadas = new Set(comSprite.map((n) => achar(n)!.name));
+console.log(`   ${comSprite.length} de ${nomesDoWiki.length} nomes do wiki acham sprite`);
+console.log(`   ${alcancadas.size} de ${lista.length} criaturas da TibiaData ficam alcancaveis`);
+// Numeros travados: a primeira versao (regra unica de plural) achava 613.
+// Se cair abaixo disso, alguma regra regrediu.
+ok("cobertura do wiki nao regrediu", comSprite.length >= 715, true);
+ok("criaturas alcancaveis nao regrediu", alcancadas.size >= 712, true);
+// O resto do wiki sao bosses e bichos de evento que nao existem na biblioteca
+// do tibia.com — limite da fonte, nao defeito do de-para.
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} FALHA(S)`);
 process.exit(falhas === 0 ? 0 : 1);

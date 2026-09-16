@@ -11,8 +11,9 @@
  *
  * 2. O nome do Hunt Analyser NÃO casa com o `race`. O jogo escreve
  *    "betrayed wraith" e o race é "wraith" — nenhuma slugificação chega lá.
- *    O que casa é o NOME, depois de normalizar plural dos dois lados:
- *    "betrayed wraith" ↔ "Betrayed Wraiths". Ver `normalizarNomeDeCriatura`.
+ *    O que casa é o NOME, desfeito o plural dos dois lados. Como `-ies` é
+ *    ambíguo (furies→fury, zombies→zombie), o índice guarda cada criatura sob
+ *    TODAS as variantes plausíveis. Ver `lib/nomesDeCriatura.ts`.
  *
  * 3. `static.tibia.com` responde 403 para cliente que não é navegador. A URL
  *    precisa ir para o `<img>` e ser buscada PELO NAVEGADOR — nada de
@@ -20,9 +21,7 @@
  */
 
 import { cacheLife } from "next/cache";
-import { normalizarNomeDeCriatura } from "./nomesDeCriatura.ts";
-
-export { normalizarNomeDeCriatura };
+import { variantesDeNome } from "./nomesDeCriatura.ts";
 
 const BASE = "https://api.tibiadata.com/v4";
 const UA = "lootibia/0.1 (+https://lootibia.vercel.app)";
@@ -34,7 +33,11 @@ interface CriaturaDaLista {
 }
 
 /**
- * Mapa `nome normalizado -> URL do sprite`, para o `<img>` do navegador.
+ * Índice `chave -> URL do sprite`, para o `<img>` do navegador.
+ *
+ * Cada criatura entra sob todas as suas variantes de nome e sob o `race`.
+ * Dá ~2.600 chaves e ~190 KB, que ficam só no servidor: para o HTML vai
+ * apenas a URL dos mobs visíveis.
  *
  * Objeto simples, não Map, porque o valor atravessa a fronteira do cache.
  *
@@ -70,10 +73,24 @@ export async function spritesDeCriaturas(): Promise<Record<string, string>> {
     const lista = corpo.creatures?.creature_list ?? [];
     const mapa: Record<string, string> = {};
     for (const c of lista) {
-      if (c?.name && c?.image_url) mapa[normalizarNomeDeCriatura(c.name)] = c.image_url;
+      if (!c?.name || !c?.image_url) continue;
+      for (const chave of variantesDeNome(c.name)) mapa[chave] = c.image_url;
+      if (c.race) mapa[c.race] = c.image_url;
     }
     return mapa;
   } catch {
     return {};
   }
+}
+
+/** Acha o sprite de um nome vindo do Hunt Analyser, tentando cada variante. */
+export function spriteDe(
+  indice: Record<string, string>,
+  nome: string,
+): string | undefined {
+  for (const chave of variantesDeNome(nome)) {
+    const url = indice[chave];
+    if (url) return url;
+  }
+  return undefined;
 }
