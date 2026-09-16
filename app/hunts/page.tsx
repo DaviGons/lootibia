@@ -8,6 +8,8 @@ import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { spritesDeCriaturas } from "@/lib/tibiadata";
+import { normalizarNomeDeCriatura } from "@/lib/nomesDeCriatura";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -173,6 +175,10 @@ async function Painel() {
     .in("sessao_id", daSemana.length > 0 ? daSemana.map((l) => l.id) : [-1]);
   const detalhes = (dadosDetalhe ?? []) as unknown as LinhaDetalhe[];
 
+  // Sprites da TibiaData: uma chamada para as ~718 criaturas, cacheada por dia.
+  // Falha aqui devolve mapa vazio — a lista aparece sem sprite, nunca quebra.
+  const sprites = await spritesDeCriaturas();
+
   const resumo = resumirHunts(daSemana.map((l) => paraAgregado(l, detalhes)));
   const geral = resumirHunts(linhas.map((l) => paraAgregado(l)));
 
@@ -250,11 +256,30 @@ async function Painel() {
             {resumo.monstrosMortos.map((m, i) => (
               <li
                 key={m.nome}
-                className="entra grid grid-cols-[minmax(6rem,11rem)_1fr_3.5rem] items-center gap-3"
+                className="entra grid grid-cols-[minmax(8rem,13rem)_1fr_3.5rem] items-center gap-3"
                 style={{ "--i": i } as React.CSSProperties}
               >
-                <span className="truncate text-sm capitalize" title={m.nome}>
-                  {m.nome}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                    {sprites[normalizarNomeDeCriatura(m.nome)] && (
+                      // <img> de proposito, sem next/image: o static.tibia.com
+                      // devolve 403 para quem nao e navegador, e a otimizacao de
+                      // imagem da Vercel buscaria a partir do servidor.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={sprites[normalizarNomeDeCriatura(m.nome)]}
+                        alt=""
+                        width={32}
+                        height={32}
+                        loading="lazy"
+                        decoding="async"
+                        className="max-h-8 w-auto opacity-90 transition-opacity duration-200 hover:opacity-100"
+                      />
+                    )}
+                  </span>
+                  <span className="truncate text-sm capitalize" title={m.nome}>
+                    {m.nome}
+                  </span>
                 </span>
                 <span className="h-2.5 rounded-sm bg-[hsl(var(--dado-trilho))]">
                   <span

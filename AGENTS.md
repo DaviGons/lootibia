@@ -51,7 +51,9 @@ Se a validação falhar, reportar a falha com a saída; não pedir aprovação d
 npx tsc --noEmit
 npx eslint .
 npm run build
-node --experimental-strip-types lib/periodo.test.ts && node --experimental-strip-types lib/hunt.test.ts
+node --experimental-strip-types lib/periodo.test.ts
+node --experimental-strip-types lib/hunt.test.ts
+node --experimental-strip-types lib/tibiadata.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.

@@ -45,7 +45,7 @@ Códigos observados: `11002` mundo inexistente · `14006` nome de guild inválid
 | `/v4/guild/{name}` · `/v4/guilds/{world}` | |
 | `/v4/highscores/{world}/{category}/{vocation}/{page}` | **Só a página 1 funciona em produção** (restriction mode, erro `9002`). |
 | `/v4/killstatistics/{world}` | `entries[]` com `race`, `last_day_killed`, `last_day_players_killed`, `last_week_*`. ~185 KB por mundo. |
-| `/v4/creatures` · `/v4/creature/{race}` | Texto de biblioteca do tibia.com (descrição, comportamento, imagem). **Não** tem loot. |
+| `/v4/creatures` · `/v4/creature/{race}` | Texto de biblioteca do tibia.com. **Não** tem loot. A lista traz as ~718 criaturas com `image_url` numa só chamada — ver "Sprites" abaixo. |
 | `/v4/boostablebosses` · `/v4/fansites` · `/v4/spells` · `/v4/spell/{id}` | |
 | `/v4/houses/{world}/{town}` · `/v4/house/{world}/{house_id}` | |
 | `/v4/news/latest` · `/v4/news/newsticker` · `/v4/news/archive[/{days}]` · `/v4/news/id/{id}` | |
@@ -57,6 +57,25 @@ Códigos observados: `11002` mundo inexistente · `14006` nome de guild inválid
 | character, house, guild, killstatistics, news | 300 s |
 | creatures, spells, boostablebosses, fansites, highscores | 900 s |
 | worlds | 60 s |
+
+### Sprites de criatura
+
+`/v4/creatures` devolve, numa única chamada, `{name, race, image_url}` das ~718 criaturas. As
+imagens são GIF de **64×64** em `static.tibia.com`. Três coisas verificadas:
+
+1. **`static.tibia.com` responde `403` para quem não é navegador.** Reproduzido com `curl`, com e
+   sem `User-Agent` de navegador e com `Referer` do nosso domínio. Um `<img>` no navegador carrega
+   normalmente (~150 ms). **Consequência: a URL vai crua para o `<img>` e o navegador busca.** Nada
+   de `next/image`, cujo otimizador buscaria a imagem a partir do servidor e levaria 403.
+2. **O nome do Hunt Analyser não casa com o `race`.** O jogo escreve `betrayed wraith` e o race é
+   `wraith` — nenhuma slugificação do nome chega lá. O que casa é o **nome**, normalizando plural
+   dos dois lados: `betrayed wraith` ↔ `Betrayed Wraiths`.
+3. **Zero colisões** entre os 718 nomes depois de normalizados, o que autoriza usar a normalização
+   no lugar de uma tabela de de-para manual. Travado em `lib/tibiadata.test.ts` contra fixture.
+
+Implementação: `lib/nomesDeCriatura.ts` (lógica pura) e `lib/tibiadata.ts` (cliente, com
+`'use cache'` + `cacheLife('days')`). Falha na API devolve mapa vazio: sprite é decoração e não
+pode derrubar a tela.
 
 ### Armadilhas confirmadas
 
