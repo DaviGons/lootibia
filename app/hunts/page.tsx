@@ -6,6 +6,8 @@ import { semanaTibia, diaTibia } from "@/lib/periodo";
 import { FormularioImportacao } from "./formulario";
 import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
+import { LogoutButton } from "@/components/logout-button";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -94,6 +96,21 @@ function paraAgregado(l: LinhaSessao, detalhes: LinhaDetalhe[] = []): SessaoRotu
     camposIgnorados: {},
     rotulo: l.spot?.nome,
   };
+}
+
+/** E-mail + sair. Le cookie, entao vive atras de um <Suspense>. */
+async function BarraConta() {
+  if (!hasEnvVars) return null;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const email = data?.claims?.email as string | undefined;
+  if (!email) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hidden text-xs text-muted-foreground sm:inline">{email}</span>
+      <LogoutButton />
+    </div>
+  );
 }
 
 async function Painel() {
@@ -359,13 +376,21 @@ async function Painel() {
 export default function PaginaHunts() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-16">
-      <header className="entra mb-12">
-        <h1 className="text-xl font-semibold tracking-tight">
-          loot<span className="text-primary">ibia</span>
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Analisador de hunts — a semana do jogo vira às 10:00 de Berlim, no server save.
-        </p>
+      <header className="entra mb-12 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            loot<span className="text-primary">ibia</span>
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Analisador de hunts — a semana do jogo vira às 10:00 de Berlim, no server save.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Suspense fallback={null}>
+            <BarraConta />
+          </Suspense>
+          <ThemeSwitcher />
+        </div>
       </header>
 
       <Suspense
