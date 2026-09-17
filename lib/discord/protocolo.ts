@@ -207,12 +207,20 @@ export interface Embed {
 
 /**
  * Cor da barra lateral dos embeds. Um só tom para tudo que o bot manda, porque
- * cor aqui é identidade visual, não semântica.
+ * cor aqui é identidade visual, não semântica. Concretamente: o `--primary`
+ * de `app/globals.css`, o mesmo laranja da lâmina da marca.
  */
-export const COR = 0x4ade80;
+export const COR = 0xeb6a33;
 
-/** Cor de erro. O usuário reconhece antes de ler. */
-export const COR_ERRO = 0xf87171;
+/**
+ * Cor de erro — o `--destructive` da paleta. O usuário reconhece antes de ler.
+ *
+ * Os dois são quentes, o que normalmente seria problema. Medido: delta E 21,5
+ * em visão normal e 14,6 sob deuteranopia, acima do limiar de ~11 em que duas
+ * cores deixam de se distinguir. E a distinção aqui nunca é só a cor — o texto
+ * do embed diz o que aconteceu.
+ */
+export const COR_ERRO = 0xd83731;
 
 /** Resposta imediata em texto. `efemera` esconde de todo mundo menos de quem chamou. */
 export function mensagem(texto: string, efemera = true) {

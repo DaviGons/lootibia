@@ -9,6 +9,7 @@ import { hasEnvVars } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { spriteDe } from "@/lib/sprites";
+import { Marca } from "@/components/marca";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -409,8 +410,10 @@ export default function PaginaHunts() {
     <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-16">
       <header className="entra mb-12 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            loot<span className="text-primary">ibia</span>
+          {/* O <h1> continua sendo o nome do produto: a Marca carrega o
+              aria-label, então o leitor de tela ouve "lootibia", não "imagem". */}
+          <h1>
+            <Marca altura={26} />
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Analisador de hunts — a semana do jogo vira às 10:00 de Berlim, no server save.

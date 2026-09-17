@@ -52,11 +52,13 @@ Em aberto: as quatro telas de auth seguem em inglês (vêm do template); o de-pa
 com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
 bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
 
-**Identidade visual em elaboração (2026-09-17).** Quando houver paleta definida, ela precisa chegar
-a quatro lugares, e o quarto é o esquecido: `app/globals.css` e `tailwind.config.ts` (tokens do
-site), `app/opengraph-image.png` e `app/twitter-image.png` (ainda os do template), o favicon em
-`app/favicon.ico`, e **`COR` / `COR_ERRO` em `lib/discord/protocolo.ts`** — a barra lateral dos
-embeds do bot, hoje um verde genérico (`0x4ade80`) herdado do nada.
+**Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
+desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
+lâmina em `--primary`. Geometria em [lib/marca.ts](lib/marca.ts), componentes em
+[components/marca.tsx](components/marca.tsx), arquivos de imagem gerados por
+`scripts/gerar-marca.ts` (diretriz 37). A cor chegou aos cinco lugares: tokens do site,
+telas de auth, `app/icon.svg` + `favicon.ico` + `apple-icon.png`, cartão social, e `COR`/`COR_ERRO`
+em `lib/discord/protocolo.ts` — que deixaram de ser o verde genérico herdado do template.
 
 ---
 
@@ -80,6 +82,7 @@ node --experimental-strip-types lib/periodo.test.ts
 node --experimental-strip-types lib/hunt.test.ts
 node --experimental-strip-types lib/sprites.test.ts
 node --experimental-strip-types lib/discord.test.ts
+node --experimental-strip-types lib/marca.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -269,3 +272,19 @@ API de verdade, rodado sob demanda.
 © CipSoft GmbH; creditar `tibia.com` (via TibiaData) e o TibiaWiki (via tibiawiki.dev).
 
 **31. Comentários e commits em português**, acompanhando o padrão dos outros repositórios do autor.
+
+**37. As letras da marca são desenhadas, não tipografadas.** `lib/marca.ts` não tem um `<text>`
+sequer: cada letra é `<rect>`, `<circle>` ou `<path>`. Não é purismo. O favicon e o cartão social
+saem de `sharp`, que rasteriza SVG **fora do navegador** e usa as fontes da máquina de quem rodar o
+gerador — texto ali sai diferente em cada máquina, ou não sai. `lib/marca.test.ts` trava isso.
+
+Consequência: `o`, `b` e `a` são um caminho só, contorno externo mais olho, com
+`fill-rule="evenodd"`. Anel de traço mais retângulo de haste **não encosta**: com bojo de raio 28 e
+haste tangente de 16, os dois só se cruzam em y=47,7, abaixo do topo da altura-x, e sobra um degrau
+de fundo de 4,58 — imperceptível em 22 px, escancarado em 1200.
+
+Os arquivos de imagem são versionados e regerados à mão, pelo mesmo motivo da diretriz 33:
+
+```bash
+node --experimental-strip-types scripts/gerar-marca.ts
+```
