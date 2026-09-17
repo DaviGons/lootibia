@@ -226,9 +226,13 @@ passaria a depender de cada `.eq('usuario_id', …)` do código — e `where` es
 enquanto política de RLS não se esquece sozinha.
 
 Ressalva registrada: o projeto Supabase usa chaves **assimétricas (ES256)**, cuja privada não é
-exportável. A assinatura é em **HS256 com o segredo legado**, que vale enquanto não for revogado no
-painel. Se for, `lib/supabase/bot.ts` é o único arquivo a reescrever — todo o resto do bot fala com
-`clienteDoUsuario` e não sabe como o token nasceu.
+exportável. A assinatura é em **HS256 com o segredo legado**, que o painel marca como
+`still used — used only to verify JWTs`. **Verificado em 2026-09-17** com
+`scripts/checar-jwt.ts`: token do bot aceito (`200`), token forjado recusado (`401`).
+
+Vale enquanto o segredo não for revogado. Se for, `lib/supabase/bot.ts` é o único arquivo a
+reescrever — todo o resto do bot fala com `clienteDoUsuario` e não sabe como o token nasceu. O
+sintoma será `401` sem explicação em qualquer comando; rodar `checar-jwt.ts` aponta a causa.
 
 **35. Trabalho de bot sempre atrás de `after()`.** Em serverless a invocação morre quando o handler
 retorna: sem `after()` (que na Vercel vira `waitUntil`), o que vem depois do defer simplesmente não

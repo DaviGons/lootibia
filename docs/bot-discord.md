@@ -211,9 +211,28 @@ A chave secreta, em qualquer caso, **nunca** em variável `NEXT_PUBLIC_*` (diret
 projeto, que traz uma única chave `ES256`. A privada fica com o Supabase e **não é exportável** —
 não dá para assinar com ela.
 
-Logo, `lib/supabase/bot.ts` assina em **HS256 com o segredo legado** do projeto, que continua sendo
-aceito enquanto não for revogado no painel (Project Settings → JWT Keys; o estado usual depois da
-migração é *Previously used key* / standby).
+Logo, `lib/supabase/bot.ts` assina em **HS256 com o segredo legado** do projeto. O painel mostra
+`Legacy JWT secret (still used) — Used only to verify JWTs`: o Supabase parou de *emitir* em HS256,
+mas continua **verificando**, que é exatamente o lado de que precisamos — nós assinamos, ele
+verifica.
+
+**Confirmado na prática em 2026-09-17**, não por leitura da tela. `scripts/checar-jwt.ts` assina um
+token igual ao do bot e bate em `/rest/v1/sessao`:
+
+```
+segredo do projeto          HTTP 200  []
+segredo errado (controle)   HTTP 401  "None of the keys was able to decode the JWT"
+```
+
+O `200 []` é token aceito com a RLS filtrando tudo (o `sub` é um uuid inexistente). O controle com
+segredo errado é o que dá sentido ao teste: sem ele, um `200` poderia ser o PostgREST ignorando o
+`Authorization` e caindo na chave publicável.
+
+Rodar de novo quando algo der `401` sem explicação:
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/checar-jwt.ts
+```
 
 Se esse segredo for revogado, o bot para de autenticar. As saídas, nessa ordem:
 
@@ -340,8 +359,8 @@ O que **não** deu para confirmar na documentação e precisa de teste na implem
    não mostra sprites (armadilha 1).
 4. **Quantos componentes cabem num modal.** A referência de componentes não explicita; sabemos que
    mensagem aceita até 40. Três campos, que é o que `/addhunt` precisa, está seguro.
-5. **O segredo HS256 legado ainda é aceito neste projeto Supabase?** É a única coisa que pode
-   derrubar a decisão 3. Ver "O que a implementação descobriu".
+5. ~~**O segredo HS256 legado ainda é aceito neste projeto Supabase?**~~ **Sim, verificado em
+   2026-09-17** com `scripts/checar-jwt.ts`. Ver "O que a implementação descobriu".
 6. **`after()` segura a instância na Vercel até o `PATCH` sair?** Em `next dev` foi verificado que
    ele roda depois da resposta e que o erro dentro dele é capturado (o follow-up saiu e levou
    `404 Unknown Webhook`, que é o esperado com token falso). **Na Vercel, não.** É o comportamento
