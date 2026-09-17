@@ -10,6 +10,7 @@ Referências técnicas verificadas — **ler antes de escrever código que toque
 - [docs/stack.md](docs/stack.md) — limites reais dos planos gratuitos, Supabase+Next.js, RLS, Tailwind.
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
+- [docs/bot-discord.md](docs/bot-discord.md) — desenho do bot (nada implementado).
 
 ## Escopo
 
@@ -28,10 +29,14 @@ Duas regras de cálculo que não se negociam:
 Detalhes do formato, armadilhas e dimensionamento: [docs/hunt-analyser.md](docs/hunt-analyser.md).
 Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 
-**Estado em 2026-09-16:** existe app Next.js rodando, schema SQL em
-`supabase/migrations/0001_schema.sql` e a tela de teste em `/hunts` (importar, listar, apagar,
-acumulado da semana). O standby dos módulos de `lib/` foi levantado — eles agora são usados pela
-tela. O schema **ainda não foi aplicado num projeto Supabase real**.
+**Estado em 2026-09-17:** app no ar em <https://lootibia.vercel.app>, schema de
+`supabase/migrations/0001_schema.sql` **aplicado e verificado** no Supabase — importação, RLS
+isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
+ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
+
+Em aberto: as quatro telas de auth seguem em inglês (vêm do template); o de-para de plural dos
+**itens** (`great mana potions` → `Great Mana Potion`) não existe, e sem ele não dá para cruzar loot
+com `npcvalue` do wiki; e o bot do Discord está desenhado, não implementado.
 
 ---
 
@@ -53,7 +58,7 @@ npx eslint .
 npm run build
 node --experimental-strip-types lib/periodo.test.ts
 node --experimental-strip-types lib/hunt.test.ts
-node --experimental-strip-types lib/tibiadata.test.ts
+node --experimental-strip-types lib/sprites.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -110,6 +115,10 @@ estável — ela espelha templates de wiki que mudam sem aviso.
 **15. Todo acesso passa por uma camada de cliente única, por API.** Nenhum `fetch` solto espalhado
 pelo código. Cada cliente concentra URL base, `User-Agent` identificável, timeout, retry, cache e
 normalização.
+
+Hoje o único código que chama a TibiaData é `scripts/atualizar-criaturas.ts`, rodado à mão. A tela
+**não faz chamada de API nenhuma** — lê `lib/dados/criaturas.ts`, versionado. O motivo está na
+diretriz 33.
 
 **16. Nunca confiar apenas no status HTTP.** TibiaData devolve `502 text/plain` para recurso
 inexistente (não 404) e `400` com JSON válido para erro de validação — a verdade está em
@@ -181,6 +190,14 @@ acordado (pausa após 1 semana de inatividade).
 
 **28. Dado de wiki que muda pouco vai para ISR, não para o banco.** Revalidação por tempo resolve a
 maior parte dos casos sem consumir os 500 MB.
+
+**33. `use cache` não é cache confiável em serverless.** A documentação do Next é explícita: com o
+handler em memória padrão, "serverless instances are ephemeral, so entries may not be reused between
+requests". Na Vercel, um `'use cache'` numa lista externa significaria rebuscá-la a cada
+carregamento de página — o oposto da diretriz 17. Para dado que muda raramente (a lista de
+criaturas muda só quando o jogo ganha bicho novo), **versionar um arquivo gerado é melhor que
+cachear**: custo zero, diff auditável e nenhuma dependência de terceiro no caminho da requisição.
+`'use cache: remote'` é durável mas, segundo a própria documentação, "incurs platform fees".
 
 **32. Next.js 16 com Cache Components muda as regras de renderização.** `export const dynamic` foi
 removido e **ler `cookies()` fora de um `<Suspense>` é erro de build** — o que inclui todo uso do
