@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { resumirHunts, type SessaoRotulada } from "@/lib/huntAgregado";
 import { semanaTibia, diaTibia } from "@/lib/periodo";
-import { FormularioImportacao } from "./formulario";
+import { FormularioImportacao, VinculoDiscord } from "./formulario";
 import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
@@ -446,6 +446,17 @@ export default function PaginaHunts() {
           são recalculados a partir dos totais.
         </p>
         <FormularioImportacao />
+      </section>
+
+      <section className="entra mt-6 rounded-xl border bg-card p-5 sm:p-6">
+        <h2 className="text-sm font-medium">Vincular Discord</h2>
+        <p className="mb-4 mt-0.5 text-xs text-muted-foreground">
+          Liga sua conta ao bot: <code className="rounded bg-muted px-1">/addhunt</code> passa a
+          gravar aqui e <code className="rounded bg-muted px-1">/viewstats</code> lê daqui. O
+          vínculo também entrega ao bot o seu fuso horário — sem ele não dá para saber a que dia
+          de Tibia cada sessão pertence.
+        </p>
+        <VinculoDiscord />
       </section>
 
       <footer className="mt-16 text-xs leading-relaxed text-muted-foreground">

@@ -1,11 +1,39 @@
-# Bot do Discord — desenho
+# Bot do Discord — desenho e implementação
 
-> **STATUS: DESENHO. Nada implementado.** Escrito em 2026-09-17 a partir da conversa de desenho.
-> Limites do Discord citados aqui foram conferidos na documentação oficial na mesma data; o que
-> **não** deu para confirmar está marcado como tal na seção "A verificar".
+> **STATUS: IMPLEMENTADO, NÃO TESTADO CONTRA O DISCORD REAL.** Desenhado e implementado em
+> 2026-09-17. Limites do Discord citados aqui foram conferidos na documentação oficial na mesma
+> data; o que **não** deu para confirmar está marcado como tal na seção "A verificar".
+>
+> O que falta para rodar está em [Como colocar no ar](#como-colocar-no-ar), no fim.
 
-Este documento existe para que a implementação comece sem depender da conversa que o originou.
-Leia junto com [AGENTS.md](../AGENTS.md) — as 33 diretrizes continuam valendo.
+Leia junto com [AGENTS.md](../AGENTS.md) — as diretrizes continuam valendo, e as 34 a 36 nasceram
+deste trabalho.
+
+## Onde está cada coisa
+
+| Arquivo | Papel |
+|---|---|
+| `app/api/discord/route.ts` | O bot inteiro: verifica assinatura, roteia comandos e modais |
+| `lib/discord/assinatura.ts` | Ed25519 nativo do Node, sem dependência |
+| `lib/discord/protocolo.ts` | Tipos, limites e construtores de resposta do Discord |
+| `lib/discord/comandos.ts` | Definição dos comandos e dos campos de modal |
+| `lib/discord/janela.ts` | Rótulo de período → intervalo `[início, fim)` em UTC |
+| `lib/discord/embed.ts` | `ResumoDeHunts` → embed que cabe nos limites |
+| `lib/supabase/bot.ts` | **Único** ponto de contato com o Supabase; assina o JWT |
+| `lib/importacao.ts` | Núcleo da importação, compartilhado com a tela |
+| `lib/consulta.ts` | Leitura agregada de um período |
+| `scripts/registrar-comandos.ts` | Registra os slash commands (rodado à mão) |
+| `supabase/migrations/0002_bot_discord.sql` | `personagem`, `perfil`, `codigo_vinculo` |
+| `lib/discord.test.ts` | 103 asserções, sem framework, sem rede |
+
+Três decisões de implementação que o desenho não previa:
+
+1. **Node traz Ed25519 nativo** (`crypto.verify(null, …)`), o que dispensou `discord-interactions`
+   e `tweetnacl`. O único incômodo é que o Discord publica a chave como 32 bytes crus em hex e
+   `createPublicKey` só aceita DER — o prefixo SPKI de Ed25519 é constante, então basta concatenar.
+2. **`after()` do Next é obrigatório**, não otimização. Ver diretriz 35.
+3. **`export const runtime = 'nodejs'` não compila** com Cache Components ligado. Node já é o padrão
+   de route handler, então o efeito é o desejado — mas o aviso em tempo de build se perde.
 
 ## Para quem é
 
@@ -112,17 +140,28 @@ nunca média das médias (ver escopo em AGENTS.md).
 Limites de embed a respeitar: **1.024 caracteres por campo, 6.000 no embed inteiro**. A lista de
 mobs precisa de corte — top 10 e "+N outros".
 
-**Decisão em aberto: resposta pública ou efêmera?** Num grupo de amigos, pública faz mais sentido
-(a graça é comparar), mas é escolha do Davi.
+**Decidido em 2026-09-17: efêmera por padrão, pública por escolha de quem chama** — o argumento
+`publico: true`. Num grupo de amigos a graça é comparar, mas quem não quer mostrar o número ruim da
+semana não deveria ser obrigado.
+
+Detalhe de implementação que essa decisão impõe: **a visibilidade é decidida no defer e não muda
+depois**. O follow-up não consegue alterar a flag de uma resposta já adiada, então o handler lê o
+argumento antes de responder, não dentro do `after()`.
+
+O filtro implementado é `semana` (padrão) · `semana-passada` · `mes` · `tudo`. As fronteiras são as
+do jogo, não as do calendário civil: a semana abre no server save de segunda, e o mês no server save
+do dia 1 — uma hunt às 09:00 de Berlim do dia 1 pertence ao último dia do mês anterior.
 
 ### `/ranking` — o que justifica o bot existir
 
-Comparar profit/h entre os membros do grupo é a única coisa aqui que um bot faz melhor que uma
-página web. Se for para ter um quarto comando, é este.
+**Fora da primeira entrega** (decidido em 2026-09-17). Comparar profit/h entre os membros do grupo é
+a única coisa aqui que um bot faz melhor que uma página web, então continua sendo o próximo
+candidato.
 
-Atenção: cruza dados entre usuários, então **não pode** rodar com a RLS escopada num único usuário.
-Precisa de uma consulta agregada deliberada, e de todo mundo ciente de que os números aparecem para
-o grupo.
+Atenção quando for implementado: cruza dados entre usuários, então **não pode** rodar com a RLS
+escopada num único usuário — o que é exatamente o que `lib/supabase/bot.ts` faz hoje. Precisa de uma
+consulta agregada deliberada (uma função `security definer` que devolva só o agregado, no espírito
+de `usuario_do_discord`), e de todo mundo ciente de que os números aparecem para o grupo.
 
 ### `/cadastro` — vincular Discord ao site
 
@@ -160,18 +199,57 @@ um ID de usuário do Discord, não uma sessão do Supabase. Três saídas:
 **O vínculo (2) é obrigatório nos três casos** e já está no plano. A escolha real é entre 1 e 3
 depois dele.
 
-**Recomendado: 3.** Depois que o vínculo existe, assinar o JWT com o segredo do projeto é umas 20
-linhas a mais e mantém a RLS como quem garante o isolamento, em vez do código do bot. Como é
-círculo fechado, a opção 1 é defensável — mas é uma escolha, não um padrão.
+**Escolhida: 3** (decidido em 2026-09-17). Depois que o vínculo existe, assinar o JWT com o segredo
+do projeto mantém a RLS como quem garante o isolamento, em vez do código do bot. Como é círculo
+fechado, a opção 1 é defensável — mas é uma escolha, não um padrão. Virou a diretriz 34.
 
 A chave secreta, em qualquer caso, **nunca** em variável `NEXT_PUBLIC_*` (diretriz 26).
+
+### O que a implementação descobriu
+
+**O projeto Supabase usa chaves JWT assimétricas (ES256/P-256).** Conferido no JWKS público do
+projeto, que traz uma única chave `ES256`. A privada fica com o Supabase e **não é exportável** —
+não dá para assinar com ela.
+
+Logo, `lib/supabase/bot.ts` assina em **HS256 com o segredo legado** do projeto, que continua sendo
+aceito enquanto não for revogado no painel (Project Settings → JWT Keys; o estado usual depois da
+migração é *Previously used key* / standby).
+
+Se esse segredo for revogado, o bot para de autenticar. As saídas, nessa ordem:
+
+1. Reabilitar o segredo legado no painel — é uma chave, não uma mudança de arquitetura.
+2. Cair para `service_role` (opção 1), aceitando que o isolamento vira responsabilidade do código.
+3. Trocar o mecanismo por um login real de serviço no Supabase.
+
+Em qualquer dos três, **o arquivo a reescrever é só `lib/supabase/bot.ts`**: todo o resto do bot
+chama `clienteDoUsuario` e não sabe como o token nasceu. Foi para isso que ele existe.
+
+### Claims que o token precisa carregar
+
+Errar aqui produz uma falha confusa: o PostgREST aceita o token e nega tudo.
+
+| Claim | Valor | Por quê |
+|---|---|---|
+| `sub` | `usuario_id` | É o que `auth.uid()` devolve dentro das políticas |
+| `role` | `authenticated` | Sem isto o token cai em `anon`, que não tem política nenhuma |
+| `aud` | `authenticated` | Validado pelo GoTrue |
+| `exp` | `iat + 120 s` | O token morre com a requisição; não há nada para renovar |
+
+Dois pontos do schema ficam **fora** desse regime, porque acontecem antes de o bot saber quem é o
+usuário — é justamente o que a chamada descobre: `vincular_discord` e `usuario_do_discord`. As duas
+são `security definer` e deliberadamente estreitas.
 
 ---
 
 ## Delta de schema
 
+> **Implementado em `supabase/migrations/0002_bot_discord.sql`** — que é a fonte da verdade, com as
+> políticas de RLS, as duas funções `security definer` e a retenção. O esboço abaixo fica como
+> registro do desenho.
+
 Duas mudanças, e as duas precisam aparecer **no site também**, senão as pontas divergem no primeiro
-dia:
+dia. No site elas viraram: campo **Personagem** no formulário de importação, o fuso do navegador
+gravado em `perfil` a cada importação, e a seção **Vincular Discord**, que gera o código.
 
 ```sql
 -- Personagem: lookup igual a spot (diretriz 10 — nome repetido vira id).
@@ -204,12 +282,13 @@ código dele.
 
 ## Armadilhas
 
-**1. O sprite pode não aparecer no Discord.** O Discord busca imagens de embed **pelo servidor
-dele**, para cachear no CDN próprio — e `static.tibia.com` responde **403 para quem não é
-navegador** (verificado com `curl`, com e sem User-Agent de navegador e com Referer nosso; detalhes
-em [tibia-apis.md](tibia-apis.md)). É exatamente o caso que falha. **Precisa testar antes de
-prometer sprite no embed.** Se falhar: hospedar os sprites no bucket do Supabase (aí o 1 GB de
-storage entra na conta) ou aceitar embed sem imagem.
+**1. ~~O sprite pode não aparecer no Discord.~~ RESOLVIDA POR DECISÃO: o bot não mostra sprites.**
+Decidido em 2026-09-17 — embed é texto puro. O Discord busca imagens de embed **pelo servidor dele**,
+para cachear no CDN próprio, e `static.tibia.com` responde **403 para quem não é navegador**
+(verificado com `curl`, com e sem User-Agent de navegador e com Referer nosso; detalhes em
+[tibia-apis.md](tibia-apis.md)) — era exatamente o caso que falharia. Hospedar no bucket do Supabase
+resolveria, mas põe o 1 GB de storage na conta para ganhar enfeite. Se um dia isso mudar, o lugar é
+`lib/discord/embed.ts`, que já tem o aviso no cabeçalho.
 
 **2. Orçamento de 500 MB fica multiusuário.** A 896 bytes por hunt, o teto prático é ~410 mil
 hunts. Um grupo de amigos leva anos; se abrir, a política de retenção da diretriz 12 deixa de ser
@@ -217,6 +296,34 @@ teoria.
 
 **3. Rate limit do Discord.** Não estudado ainda. Relevante se `/ranking` ou `/viewstats` virarem
 frequentes.
+
+**4. O proxy de auth engolia o endpoint — e isso já aconteceu.** Encontrado na verificação em
+2026-09-17, não em teoria: `proxy.ts` redireciona quem não tem sessão para `/auth/login`, e o
+Discord não manda cookie nenhum. Toda interação levava **307** e o bot nunca respondia. O sintoma do
+lado do Discord é mudo — só "a aplicação não respondeu".
+
+Corrigido excluindo `api/discord` do `matcher`. Quem autentica aquele endpoint é a assinatura
+Ed25519, não o cookie. **Qualquer rota nova de bot precisa entrar nessa exclusão.**
+
+**5. `create or replace view` não sobrevive a coluna nova em `sessao`.** Aconteceu ao rodar o
+`0002` em 2026-09-17:
+
+```
+ERROR: cannot change name of view column "balance" to "personagem_id"
+```
+
+`sessao_periodo` é `select s.*, …`. Ao acrescentar `personagem_id` a `sessao`, o `*` passou a
+expandir uma coluna a mais **no meio**, e tudo que vinha depois andou uma casa. `create or replace
+view` só sabe acrescentar coluna no fim — exige nome, tipo e **posição** iguais para as que já
+existem —, então ele leu o deslocamento como uma renomeação.
+
+Correção: `drop view if exists` antes do `create view`. View não guarda dado, é consulta salva.
+**Toda coluna nova em `sessao` vai reproduzir isso** — o migration que a adicionar tem de dropar a
+view junto.
+
+Detalhe que veio de brinde: o `security_invoker` agora vai **inline no `create view`**, não num
+`alter view` depois. Entre um `create` nu e o `alter` existe um instante em que a view roda com os
+privilégios do dono e ignora a RLS.
 
 ---
 
@@ -229,9 +336,66 @@ O que **não** deu para confirmar na documentação e precisa de teste na implem
    modal continua sendo melhor UX de qualquer forma.
 2. **Multilinha em argumento de texto** — a doc confirma `max_length` até 6.000, mas não diz nada
    sobre quebra de linha. Idem: o modal resolve independente da resposta.
-3. **O proxy de imagem do Discord leva 403 do `static.tibia.com`?** Ver armadilha 1.
+3. ~~**O proxy de imagem do Discord leva 403 do `static.tibia.com`?**~~ Deixou de importar: o bot
+   não mostra sprites (armadilha 1).
 4. **Quantos componentes cabem num modal.** A referência de componentes não explicita; sabemos que
    mensagem aceita até 40. Três campos, que é o que `/addhunt` precisa, está seguro.
+5. **O segredo HS256 legado ainda é aceito neste projeto Supabase?** É a única coisa que pode
+   derrubar a decisão 3. Ver "O que a implementação descobriu".
+6. **`after()` segura a instância na Vercel até o `PATCH` sair?** Em `next dev` foi verificado que
+   ele roda depois da resposta e que o erro dentro dele é capturado (o follow-up saiu e levou
+   `404 Unknown Webhook`, que é o esperado com token falso). **Na Vercel, não.** É o comportamento
+   documentado (`waitUntil`), mas se falhar o sintoma é claro: o comando responde "pensando…" e
+   nunca conclui.
+
+### O que já foi verificado
+
+Contra o handler de verdade, por HTTP, em `next dev` (2026-09-17) — chave Ed25519 de teste, gerada e
+descartada:
+
+| Entrada | Resposta |
+|---|---|
+| `PING` assinado | `200 {"type":1}` |
+| sem cabeçalho de assinatura | `401` |
+| corpo adulterado depois de assinado | `401` |
+| `/addhunt` e `/cadastro` | `type: 9` (modal), sem defer |
+| `/viewstats` | `type: 5` com `flags: 64` (efêmera) |
+| `/viewstats publico:true` | `type: 5` sem flag |
+
+---
+
+## Como colocar no ar
+
+Nada disto foi executado — o bot está escrito e testado offline, não rodado.
+
+**1. Aplicar o schema.** `supabase/migrations/0002_bot_discord.sql` no SQL Editor, depois do `0001`.
+Conferir no fim com a consulta que o próprio arquivo traz: nenhuma tabela de `public` pode voltar com
+`rowsecurity = false`.
+
+**2. Criar o app no Discord.** No Developer Portal: nova aplicação, aba Bot. De lá saem
+`DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID` e `DISCORD_BOT_TOKEN`.
+
+**3. Variáveis de ambiente.** Ver `.env.example`. Na Vercel só precisam existir
+`DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID` e `SUPABASE_JWT_SECRET` — o token do bot é usado
+apenas pelo script de registro, e o follow-up das interações se autentica com o token da própria
+interação. **Nenhuma delas com prefixo `NEXT_PUBLIC_`** (diretriz 26).
+
+**4. Registrar os comandos.**
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/registrar-comandos.ts
+```
+
+Registra no servidor de `DISCORD_GUILD_ID`, onde aparecem na hora. Com `--global` leva até uma hora
+para propagar.
+
+**5. Apontar a Interactions Endpoint URL** para `https://lootibia.vercel.app/api/discord`. O Discord
+valida no ato mandando requisições assinadas **e** requisições propositalmente quebradas: se o
+endpoint não devolver `401` para as inválidas, ele recusa a URL. É o que `assinaturaConfere` cobre.
+
+**6. Fluxo de fumaça, nesta ordem:** `/cadastro` com um código gerado em `/hunts` → `/addhunt` com
+uma sessão de verdade → `/viewstats`. Depois `/addhunt` com a MESMA sessão, que tem de responder
+"Sessão já importada" (o `23505` do `unique (usuario_id, inicio)`).
 
 ## Fontes
 

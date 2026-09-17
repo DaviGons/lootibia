@@ -34,9 +34,16 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
+**Bot do Discord:** implementado em 2026-09-17, **ainda não testado contra o Discord real**. Três
+comandos (`/cadastro`, `/addhunt`, `/viewstats`) num endpoint de HTTP Interactions em
+`app/api/discord/route.ts`. O schema do bot está em `supabase/migrations/0002_bot_discord.sql`,
+**não aplicado**. Falta: rodar o migration, criar o app no Discord Developer Portal, preencher as
+variáveis de `.env.example` e registrar os comandos com `scripts/registrar-comandos.ts`.
+
 Em aberto: as quatro telas de auth seguem em inglês (vêm do template); o de-para de plural dos
 **itens** (`great mana potions` → `Great Mana Potion`) não existe, e sem ele não dá para cruzar loot
-com `npcvalue` do wiki; e o bot do Discord está desenhado, não implementado.
+com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
+bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
 
 ---
 
@@ -59,6 +66,7 @@ npm run build
 node --experimental-strip-types lib/periodo.test.ts
 node --experimental-strip-types lib/hunt.test.ts
 node --experimental-strip-types lib/sprites.test.ts
+node --experimental-strip-types lib/discord.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -204,6 +212,33 @@ removido e **ler `cookies()` fora de um `<Suspense>` é erro de build** — o qu
 cliente Supabase de servidor. O padrão é: shell estático na página, dados do usuário num componente
 `async` atrás da fronteira. A documentação da versão instalada está em
 `node_modules/next/dist/docs/` e é a fonte a consultar, não a memória.
+
+---
+
+## Bot do Discord
+
+Desenho completo em [docs/bot-discord.md](docs/bot-discord.md). O que não se negocia:
+
+**34. A identidade do bot passa por JWT assinado, não por `service_role`.** Depois que
+`/cadastro` vinculou `discord_id → usuario_id`, `lib/supabase/bot.ts` assina um token com
+`sub = usuario_id` e **a RLS continua sendo quem isola os dados**. Com `service_role` o isolamento
+passaria a depender de cada `.eq('usuario_id', …)` do código — e `where` esquecido é bug comum,
+enquanto política de RLS não se esquece sozinha.
+
+Ressalva registrada: o projeto Supabase usa chaves **assimétricas (ES256)**, cuja privada não é
+exportável. A assinatura é em **HS256 com o segredo legado**, que vale enquanto não for revogado no
+painel. Se for, `lib/supabase/bot.ts` é o único arquivo a reescrever — todo o resto do bot fala com
+`clienteDoUsuario` e não sabe como o token nasceu.
+
+**35. Trabalho de bot sempre atrás de `after()`.** Em serverless a invocação morre quando o handler
+retorna: sem `after()` (que na Vercel vira `waitUntil`), o que vem depois do defer simplesmente não
+roda e o usuário fica olhando "pensando…" para sempre. A exceção é o **modal, que precisa ser a
+resposta inicial** — não existe adiar e abrir modal depois.
+
+**36. A assinatura Ed25519 é verificada sobre o corpo CRU.** Ler com `req.text()` e só então
+`JSON.parse`. Reserializar o objeto muda o texto e invalida a assinatura. Devolver `401` para
+assinatura inválida não é zelo: o Discord manda requisições quebradas de propósito e recusa
+registrar a URL que não reagir assim.
 
 ---
 
