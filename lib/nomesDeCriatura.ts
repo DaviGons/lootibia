@@ -1,7 +1,7 @@
 /**
  * De-para de nomes de criatura entre o Hunt Analyser e a TibiaData.
  *
- * Fica separado de lib/tibiadata.ts de propósito: é lógica pura, sem nenhuma
+ * Fica separado de lib/sprites.ts de propósito: é lógica pura, sem nenhuma
  * dependência do Next, então roda no teste com `node --experimental-strip-types`.
  *
  * O problema: o Hunt Analyser escreve no SINGULAR e minúsculo ("dark torturer",

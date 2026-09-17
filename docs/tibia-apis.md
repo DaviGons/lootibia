@@ -89,9 +89,19 @@ Os ~1.350 nomes restantes são bosses e bichos de evento que **não existem na b
 tibia.com** — limite da fonte, não defeito do de-para. A tela mostra um marcador discreto no lugar
 do sprite nesses casos.
 
-Implementação: `lib/nomesDeCriatura.ts` (lógica pura) e `lib/tibiadata.ts` (cliente, com
-`'use cache'` + `cacheLife('days')`). O índice tem ~2.600 chaves e ~190 KB, que ficam só no
-servidor. Falha na API devolve mapa vazio: sprite é decoração e não pode derrubar a tela.
+**Implementação: nada de API em tempo de requisição.** A lista vive versionada em
+`lib/dados/criaturas.ts` (72 KB, gerado) e `lib/sprites.ts` monta o índice de ~2.600 chaves uma vez
+por processo. Quem fala com a TibiaData é `scripts/atualizar-criaturas.ts`, rodado à mão quando sair
+atualização do jogo:
+
+```bash
+node --experimental-strip-types scripts/atualizar-criaturas.ts
+```
+
+A primeira versão usava `'use cache'` + `cacheLife('days')`, até a documentação do Next deixar claro
+que em serverless "entries may not be reused between requests" — ou seja, a lista seria rebuscada a
+cada carregamento. Ver diretriz 33. O script aborta sem escrever se a API falhar ou devolver menos
+de 500 criaturas, então uma resposta truncada não sobrescreve a lista boa.
 
 ### Armadilhas confirmadas
 

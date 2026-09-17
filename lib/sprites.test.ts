@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { variantesDeNome, normalizarNomeDeCriatura } from "./nomesDeCriatura.ts";
+import { CRIATURAS } from "./dados/criaturas.ts";
+import { spriteDe, tamanhoDoIndice } from "./sprites.ts";
 
 let falhas = 0;
 function ok(nome: string, real: unknown, esperado: unknown) {
@@ -10,24 +12,18 @@ function ok(nome: string, real: unknown, esperado: unknown) {
   console.log(`${passou ? "ok  " : "FALHA"} ${nome}  ->  ${a}${passou ? "" : `  (esperado ${b})`}`);
 }
 
-interface Criatura {
-  name: string;
-  race: string;
-  image_url: string;
-}
-const lista: Criatura[] = JSON.parse(
-  readFileSync("test/fixtures/tibiadata-creatures.json", "utf8"),
-);
+// Os dados de producao, nao uma copia: o teste valida o arquivo que a tela usa.
+const lista = CRIATURAS.map(([name, race, image_url]) => ({ name, race, image_url }));
 // Nomes de página do TibiaWiki: singulares, como o Hunt Analyser escreve.
 const nomesDoWiki: string[] = JSON.parse(
   readFileSync("test/fixtures/tibiawiki-creature-names.json", "utf8"),
 );
 
-// Mesmo índice que lib/tibiadata.ts monta: cada criatura sob todas as suas
+// Mesmo índice que lib/sprites.ts monta: cada criatura sob todas as suas
 // variantes e sob o `race`.
-const indice = new Map<string, Criatura>();
+const indice = new Map<string, (typeof lista)[number]>();
 const colisoes: string[] = [];
-function indexar(chave: string, c: Criatura) {
+function indexar(chave: string, c: (typeof lista)[number]) {
   const ja = indice.get(chave);
   if (ja && ja.name !== c.name) colisoes.push(`${chave}: ${ja.name} vs ${c.name}`);
   else indice.set(chave, c);
@@ -71,8 +67,17 @@ for (const n of [
 // "wraith", que nenhuma slugificacao do nome produz.
 ok("betrayed wraith tem race 'wraith'", achar("betrayed wraith")?.race, "wraith");
 
+console.log("\n== o indice de producao concorda com o do teste");
+// spriteDe e o que a tela chama; o indice acima e uma reimplementacao usada
+// para medir colisoes. Se os dois divergirem, o teste mede outra coisa.
+for (const n of ["fury", "dark torturer", "cyclops", "zombie", "betrayed wraith"]) {
+  ok(`spriteDe("${n}") concorda com o indice`, spriteDe(n), achar(n)?.image_url);
+}
+ok("spriteDe devolve undefined fora da biblioteca", spriteDe("abyssador"), undefined);
+ok("indice tem mais de 2.000 chaves", tamanhoDoIndice() > 2000, true);
+
 console.log("\n== integridade do indice");
-ok("fixture tem 718 criaturas", lista.length, 718);
+ok("arquivo de dados tem 718 criaturas", lista.length, 718);
 // Uma chave apontando para duas criaturas exibiria o sprite do bicho errado.
 ok("nenhuma colisao", colisoes.length, 0);
 if (colisoes.length) console.log(colisoes.slice(0, 10).join("\n"));

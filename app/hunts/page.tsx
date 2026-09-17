@@ -8,7 +8,7 @@ import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { spritesDeCriaturas, spriteDe } from "@/lib/tibiadata";
+import { spriteDe } from "@/lib/sprites";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -174,10 +174,6 @@ async function Painel() {
     .in("sessao_id", daSemana.length > 0 ? daSemana.map((l) => l.id) : [-1]);
   const detalhes = (dadosDetalhe ?? []) as unknown as LinhaDetalhe[];
 
-  // Sprites da TibiaData: uma chamada para as ~718 criaturas, cacheada por dia.
-  // Falha aqui devolve mapa vazio — a lista aparece sem sprite, nunca quebra.
-  const sprites = await spritesDeCriaturas();
-
   const resumo = resumirHunts(daSemana.map((l) => paraAgregado(l, detalhes)));
   const geral = resumirHunts(linhas.map((l) => paraAgregado(l)));
 
@@ -260,13 +256,13 @@ async function Painel() {
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                    {spriteDe(sprites, m.nome) ? (
+                    {spriteDe(m.nome) ? (
                       // <img> de proposito, sem next/image: o static.tibia.com
                       // devolve 403 para quem nao e navegador, e a otimizacao de
                       // imagem da Vercel buscaria a partir do servidor.
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={spriteDe(sprites, m.nome)}
+                        src={spriteDe(m.nome)}
                         alt=""
                         width={32}
                         height={32}
