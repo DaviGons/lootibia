@@ -10,7 +10,7 @@ Referências técnicas verificadas — **ler antes de escrever código que toque
 - [docs/stack.md](docs/stack.md) — limites reais dos planos gratuitos, Supabase+Next.js, RLS, Tailwind.
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
-- [docs/bot-discord.md](docs/bot-discord.md) — desenho do bot (nada implementado).
+- [docs/bot-discord.md](docs/bot-discord.md) — desenho e implementação do bot, e as armadilhas encontradas.
 
 ## Escopo
 
@@ -34,16 +34,29 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
-**Bot do Discord:** implementado em 2026-09-17, **ainda não testado contra o Discord real**. Três
-comandos (`/cadastro`, `/addhunt`, `/viewstats`) num endpoint de HTTP Interactions em
-`app/api/discord/route.ts`. O schema do bot está em `supabase/migrations/0002_bot_discord.sql`,
-**não aplicado**. Falta: rodar o migration, criar o app no Discord Developer Portal, preencher as
-variáveis de `.env.example` e registrar os comandos com `scripts/registrar-comandos.ts`.
+**Bot do Discord: NO AR e em uso desde 2026-09-17.** Três comandos (`/cadastro`, `/addhunt`,
+`/viewstats`) num endpoint de HTTP Interactions em `app/api/discord/route.ts`, servido pelo mesmo
+deploy da Vercel — não há processo nem host a mais. `supabase/migrations/0002_bot_discord.sql`
+aplicado e conferido (RLS ligada em toda tabela nova; `sessao_periodo` recriada com
+`personagem_id`). App `Lootibia` registrado no Discord, endpoint validado por ele, comandos
+registrados no servidor com `scripts/registrar-comandos.ts`.
+
+Três coisas foram provadas em produção, não presumidas: o Discord **aceitou** a Interactions
+Endpoint URL (ou seja, a verificação Ed25519 responde `200` ao `PING` assinado e `401` ao lixo); o
+Supabase **aceita** o JWT que o bot assina (`scripts/checar-jwt.ts`); e o `after()` **roda na
+Vercel**, o que se conclui de `/cadastro` e `/addhunt` concluírem — todo o trabalho deles acontece
+lá dentro (diretriz 35).
 
 Em aberto: as quatro telas de auth seguem em inglês (vêm do template); o de-para de plural dos
 **itens** (`great mana potions` → `Great Mana Potion`) não existe, e sem ele não dá para cruzar loot
 com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
 bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
+
+**Identidade visual em elaboração (2026-09-17).** Quando houver paleta definida, ela precisa chegar
+a quatro lugares, e o quarto é o esquecido: `app/globals.css` e `tailwind.config.ts` (tokens do
+site), `app/opengraph-image.png` e `app/twitter-image.png` (ainda os do template), o favicon em
+`app/favicon.ico`, e **`COR` / `COR_ERRO` em `lib/discord/protocolo.ts`** — a barra lateral dos
+embeds do bot, hoje um verde genérico (`0x4ade80`) herdado do nada.
 
 ---
 

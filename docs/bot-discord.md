@@ -1,10 +1,11 @@
 # Bot do Discord — desenho e implementação
 
-> **STATUS: IMPLEMENTADO, NÃO TESTADO CONTRA O DISCORD REAL.** Desenhado e implementado em
-> 2026-09-17. Limites do Discord citados aqui foram conferidos na documentação oficial na mesma
-> data; o que **não** deu para confirmar está marcado como tal na seção "A verificar".
+> **STATUS: NO AR E EM USO.** Desenhado, implementado e publicado em 2026-09-17. Os três comandos
+> funcionam no servidor LooTibia. Limites do Discord citados aqui foram conferidos na documentação
+> oficial na mesma data.
 >
-> O que falta para rodar está em [Como colocar no ar](#como-colocar-no-ar), no fim.
+> O passo a passo que foi seguido está em [Como colocar no ar](#como-colocar-no-ar), no fim — ele
+> serve agora para refazer a montagem, não para fazê-la pela primeira vez.
 
 Leia junto com [AGENTS.md](../AGENTS.md) — as diretrizes continuam valendo, e as 34 a 36 nasceram
 deste trabalho.
@@ -361,11 +362,10 @@ O que **não** deu para confirmar na documentação e precisa de teste na implem
    mensagem aceita até 40. Três campos, que é o que `/addhunt` precisa, está seguro.
 5. ~~**O segredo HS256 legado ainda é aceito neste projeto Supabase?**~~ **Sim, verificado em
    2026-09-17** com `scripts/checar-jwt.ts`. Ver "O que a implementação descobriu".
-6. **`after()` segura a instância na Vercel até o `PATCH` sair?** Em `next dev` foi verificado que
-   ele roda depois da resposta e que o erro dentro dele é capturado (o follow-up saiu e levou
-   `404 Unknown Webhook`, que é o esperado com token falso). **Na Vercel, não.** É o comportamento
-   documentado (`waitUntil`), mas se falhar o sintoma é claro: o comando responde "pensando…" e
-   nunca conclui.
+6. ~~**`after()` segura a instância na Vercel até o `PATCH` sair?**~~ **Sim.** Verificado em
+   `next dev` e depois **em produção**: `/cadastro` e `/addhunt` fazem TODO o trabalho dentro do
+   `after()`, então o fato de concluírem e editarem a resposta é a prova. Se um dia parar, o
+   sintoma é claro: o comando responde "pensando…" e nunca conclui.
 
 ### O que já foi verificado
 
@@ -385,7 +385,8 @@ descartada:
 
 ## Como colocar no ar
 
-Nada disto foi executado — o bot está escrito e testado offline, não rodado.
+**Executado em 2026-09-17**, nesta ordem. Fica registrado para refazer a montagem — outro
+servidor, outro projeto Supabase, ou o dia em que uma credencial precisar ser trocada.
 
 **1. Aplicar o schema.** `supabase/migrations/0002_bot_discord.sql` no SQL Editor, depois do `0001`.
 Conferir no fim com a consulta que o próprio arquivo traz: nenhuma tabela de `public` pode voltar com
