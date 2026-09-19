@@ -47,10 +47,25 @@ Supabase **aceita** o JWT que o bot assina (`scripts/checar-jwt.ts`); e o `after
 Vercel**, o que se conclui de `/cadastro` e `/addhunt` concluírem — todo o trabalho deles acontece
 lá dentro (diretriz 35).
 
-Em aberto: as quatro telas de auth seguem em inglês (vêm do template); o de-para de plural dos
+Em aberto: o de-para de plural dos
 **itens** (`great mana potions` → `Great Mana Potion`) não existe, e sem ele não dá para cruzar loot
 com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
 bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
+
+**Login por usuário e senha — código escrito em 2026-09-19, ATIVAÇÃO PENDENTE.** Não existe
+cadastro: o Davi cria as contas com `scripts/criar-usuario.ts`, que sorteia um código de ativação.
+O código é a senha temporária; o site obriga a trocar no primeiro acesso. O modelo inteiro está em
+[lib/conta.ts](lib/conta.ts) e o que não se negocia, nas diretrizes 38 a 40.
+
+Falta, e sem isso o login novo não funciona para ninguém: rodar
+`supabase/limpar-contas.sql` (as contas antigas têm e-mail de verdade e nenhuma passa por
+`usuarioDoEmail`), desligar **"Allow new users to sign up"** e **"Confirm email"** no painel, e pôr
+`SUPABASE_SECRET_KEY` no `.env.local`.
+
+Verificado contra o projeto real: o GoTrue trata `@lootibia.invalid` como qualquer outro domínio no
+login (`invalid_credentials`, não rejeição de formato). **Não verificado:** se `admin.createUser`
+aceita o mesmo domínio — exige a chave secreta. Se recusar, o sintoma é a primeira execução de
+`criar-usuario.ts` falhar, e o conserto é a constante `DOMINIO` em `lib/conta.ts`.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -83,6 +98,7 @@ node --experimental-strip-types lib/hunt.test.ts
 node --experimental-strip-types lib/sprites.test.ts
 node --experimental-strip-types lib/discord.test.ts
 node --experimental-strip-types lib/marca.test.ts
+node --experimental-strip-types lib/conta.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -288,3 +304,27 @@ Os arquivos de imagem são versionados e regerados à mão, pelo mesmo motivo da
 ```bash
 node --experimental-strip-types scripts/gerar-marca.ts
 ```
+
+---
+
+## Contas e acesso
+
+Modelo completo em [lib/conta.ts](lib/conta.ts).
+
+**38. Não existe cadastro, e desligar isso no painel faz parte da mudança.** Remover a tela de
+`/auth/sign-up` é decoração: o endpoint `POST /auth/v1/signup` do GoTrue continua aceitando quem
+souber o caminho. **"Allow new users to sign up" tem de ficar desligado** no painel do Supabase, e
+"Confirm email" também — o domínio sintético `@lootibia.invalid` não existe por definição (RFC
+6761) e nenhuma confirmação chegaria. Passo a passo em `supabase/limpar-contas.sql`.
+
+**39. `SUPABASE_SECRET_KEY` nunca vai para a Vercel.** Ela ignora a RLS inteira e serve só a
+`scripts/criar-usuario.ts`, rodado na máquina do Davi. O site em produção não precisa dela: o
+primeiro acesso é um `signInWithPassword` comum e a troca de senha é um `updateUser`, os dois com
+a chave publicável. Pôr a secreta em produção aumentaria a superfície sem destravar recurso nenhum.
+
+**40. `senha_definida` é porteiro de fluxo, não fronteira de segurança.** A flag vive em
+`user_metadata`, que o próprio dono consegue gravar — quem quiser vira a flag sem trocar a senha.
+O que ele ganha é continuar com uma senha que o Davi mandou por Discord; não ganha dado de mais
+ninguém, porque quem isola continua sendo a RLS. A segurança real está no código de ativação ser
+um segredo de ~49 bits sorteado com `crypto.getRandomValues`. Não transformar essa flag em
+autorização de coisa alguma.

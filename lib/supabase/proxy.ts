@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
+import { senhaFoiDefinida } from "../conta";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -46,16 +47,21 @@ export async function updateSession(request: NextRequest) {
   // with the Supabase client, your users may be randomly logged out.
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
+  const caminho = request.nextUrl.pathname;
 
-  if (
-    request.nextUrl.pathname !== "/" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
+  if (caminho !== "/" && !user && !caminho.startsWith("/auth")) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Entrou com o código de ativação e ainda não escolheu senha: só existe uma
+  // tela para ele. `/auth` inteiro fica de fora do desvio, senão a própria tela
+  // de definir senha entraria em laço — e sair da conta deixaria de funcionar.
+  if (user && !senhaFoiDefinida(user.user_metadata) && !caminho.startsWith("/auth")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/definir-senha";
     return NextResponse.redirect(url);
   }
 

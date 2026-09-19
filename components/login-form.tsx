@@ -2,48 +2,53 @@
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { emailDoUsuario, normalizarUsuario, senhaFoiDefinida } from "@/lib/conta";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const entrar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
-    setError(null);
+    setEnviando(true);
+    setErro(null);
+
+    // Mesma frase para nome inválido, nome inexistente e senha errada. Distinguir
+    // os casos entregaria de graça a lista de quem tem conta aqui.
+    const GENERICO = "Usuário ou senha inválidos.";
+    const nome = normalizarUsuario(usuario);
+    if (!nome) {
+      setErro(GENERICO);
+      setEnviando(false);
+      return;
+    }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailDoUsuario(nome),
+        password: senha,
       });
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/hunts");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+
+      // Quem entrou com o código de ativação ainda não tem senha própria. O
+      // middleware barra de qualquer forma; mandar direto evita um salto a mais.
+      router.push(
+        senhaFoiDefinida(data.user?.user_metadata) ? "/hunts" : "/auth/definir-senha",
+      );
+    } catch {
+      setErro(GENERICO);
     } finally {
-      setIsLoading(false);
+      setEnviando(false);
     }
   };
 
@@ -51,56 +56,55 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">Entrar</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Primeiro acesso? Use o código de ativação no lugar da senha.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin}>
+          <form onSubmit={entrar}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="usuario">Usuário</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  id="usuario"
+                  name="username"
+                  // `username` + `current-password` fazem o gerenciador de senhas
+                  // do navegador reconhecer o formulário e oferecer o preenchimento.
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="seu usuário"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={usuario}
+                  onChange={(e) => setUsuario(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                  >
-                    Forgot your password?
-                  </Link>
-                </div>
+                <Label htmlFor="senha">Senha ou código</Label>
                 <Input
-                  id="password"
+                  id="senha"
+                  name="password"
                   type="password"
+                  autoComplete="current-password"
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
+              {erro && (
+                <p role="alert" className="text-sm text-destructive">
+                  {erro}
+                </p>
+              )}
+              <Button type="submit" className="w-full" disabled={enviando}>
+                {enviando ? "Entrando…" : "Entrar"}
               </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/auth/sign-up"
-                className="underline underline-offset-4"
-              >
-                Sign up
-              </Link>
+              <p className="text-center text-xs text-muted-foreground">
+                As contas são criadas pelo administrador. Perdeu a senha? Peça um
+                código novo.
+              </p>
             </div>
           </form>
         </CardContent>

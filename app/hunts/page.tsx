@@ -10,6 +10,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { spriteDe } from "@/lib/sprites";
 import { Marca } from "@/components/marca";
+import { usuarioDoEmail } from "@/lib/conta";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // fora de um <Suspense> é erro de build, e `export const dynamic` não existe
@@ -100,16 +101,22 @@ function paraAgregado(l: LinhaSessao, detalhes: LinhaDetalhe[] = []): SessaoRotu
   };
 }
 
-/** E-mail + sair. Le cookie, entao vive atras de um <Suspense>. */
+/** Usuario + sair. Le cookie, entao vive atras de um <Suspense>. */
 async function BarraConta() {
   if (!hasEnvVars) return null;
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  const email = data?.claims?.email as string | undefined;
-  if (!email) return null;
+  // O e-mail e sintetico (ver lib/conta.ts) e nao serve para ninguem ler.
+  const usuario = usuarioDoEmail(data?.claims?.email as string | undefined);
+  if (!usuario) return null;
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden text-xs text-muted-foreground sm:inline">{email}</span>
+      <Link
+        href="/auth/definir-senha"
+        className="hidden text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline sm:inline"
+      >
+        {usuario}
+      </Link>
       <LogoutButton />
     </div>
   );

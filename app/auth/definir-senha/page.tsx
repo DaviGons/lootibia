@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Marca } from "@/components/marca";
-import { ForgotPasswordForm } from "@/components/forgot-password-form";
+import { DefinirSenhaForm } from "@/components/definir-senha-form";
 
 export default function Page() {
   return (
@@ -10,7 +10,7 @@ export default function Page() {
         <Link href="/hunts" className="mb-8 flex justify-center text-foreground">
           <Marca altura={28} />
         </Link>
-        <ForgotPasswordForm />
+        <DefinirSenhaForm />
       </div>
     </div>
   );
