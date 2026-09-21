@@ -1,8 +1,8 @@
 # Bot do Discord — desenho e implementação
 
-> **STATUS: NO AR E EM USO.** Desenhado, implementado e publicado em 2026-09-17. Os três comandos
-> funcionam no servidor LooTibia. Limites do Discord citados aqui foram conferidos na documentação
-> oficial na mesma data.
+> **STATUS: NO AR E EM USO.** Publicado em 2026-09-17, alinhado às pastas em **2026-09-21**.
+> Quatro comandos no servidor LooTibia. Limites do Discord reconferidos em 21/09 — e a referência
+> de componentes **mudou** desde setembro; ver "O que a documentação do Discord passou a permitir".
 >
 > O passo a passo que foi seguido está em [Como colocar no ar](#como-colocar-no-ar), no fim — ele
 > serve agora para refazer a montagem, não para fazê-la pela primeira vez.
@@ -25,7 +25,78 @@ deste trabalho.
 | `lib/consulta.ts` | Leitura agregada de um período |
 | `scripts/registrar-comandos.ts` | Registra os slash commands (rodado à mão) |
 | `supabase/migrations/0002_bot_discord.sql` | `personagem`, `perfil`, `codigo_vinculo` |
-| `lib/discord.test.ts` | 103 asserções, sem framework, sem rede |
+| `lib/discord.test.ts` | asserções sem framework nem rede |
+| `scripts/testar-bot-pastas.ts` | ponta a ponta contra o Postgres: RLS, `pasta_id`, agregados |
+
+### O que a documentação do Discord passou a permitir
+
+Reconferido em 2026-09-21, e o desenho de setembro estava **desatualizado** num ponto que muda o
+produto (diretriz 14: não presumir, nem a partir do nosso próprio doc):
+
+| Componente | Tipo | Onde vale hoje |
+|---|---|---|
+| String Select | 3 | Message, **Modal** |
+| Radio Group | 21 | **Modal** |
+| Label | 18 | **Modal** |
+
+> *"String Selects are available in messages and modals. They must be placed inside an Action Row in
+> messages and a **Label** in modals."*
+
+Ou seja: **dá para escolher a pasta dentro do modal**, sem virar argumento de slash command nem
+follow-up com botão. É o que o `/addhunt` faz desde 21/09.
+
+Junto veio uma depreciação que nos atingiu:
+
+> *"**Action Row with Text Inputs in modals are now deprecated.** (…) Going forward all Text Inputs
+> should be placed inside a Label component."*
+
+Era exatamente o que `protocolo.ts` fazia. A migração não é cosmética: **muda o formato do submit**.
+
+```
+Label (atual):  { type: 18, component:  { type: 4, custom_id, value  } }
+Action Row:     { type: 1,  components: [{ type: 4, custom_id, value }] }
+```
+
+Singular contra plural. Um parser que só conhecesse `components[]` devolveria `null` para todo campo,
+**sem erro nenhum** — o comando responderia "cole o texto do Hunt Analyser" para quem acabou de colar.
+`componentesDoModal` entende os dois formatos, porque um modal aberto antes de um deploy pode ser
+submetido depois dele.
+
+E `value` é de Text Input; String Select devolve `values`, um array, mesmo escolhendo uma opção só.
+Daí existirem `campoDoModal` e `selecaoDoModal` separadas, com teste cruzado provando que cada uma
+devolve `null` para o tipo da outra.
+
+### A janela de 3 s virou restrição de verdade
+
+`/addhunt` responde **modal**, que não pode ser adiado — e montar o seletor exige buscar as pastas no
+banco. Medido em 2026-09-21:
+
+| | pior caso | morno |
+|---|---|---|
+| Cold start do endpoint | 1,49 s | 0,25 s |
+| RPC de perfil + select de pastas | 0,85 s | 0,09 s |
+| **Total** | **~2,34 s** | ~0,34 s |
+
+Sobrariam ~660 ms dos 3 s, e a medição saiu de fora da região da função. Folga pequena demais.
+
+Solução: `dentroDoOrcamento()` — a busca corre contra um timer de **1,2 s** e o que perder a corrida é
+descartado. Passado o prazo, o modal abre **sem** o seletor e a hunt cai em "Sem pasta", que é o
+comportamento de antes desta entrega. Degradar é ruim; estourar a janela e mostrar "a aplicação não
+respondeu" é pior.
+
+O `/viewstats` e o `/meta` não têm esse problema: adiam, e ganham 15 minutos.
+
+### Autocomplete, e por que não `choices`
+
+A opção `pasta` de `/viewstats` e `/meta` usa `autocomplete: true`. `choices` é fixo no momento do
+registro, e pasta é de cada usuário — mudaria a cada pasta criada. Autocomplete é **interação
+própria**, com janela de 3 s só dela, então não rouba tempo do comando.
+
+O valor que trafega é o **id**, nunca o nome: nome muda, e duas pessoas podem ter pastas homônimas.
+Como o Discord aceita texto livre num campo autocompletável, `idDePasta()` recusa o que não for
+inteiro positivo em vez de deixar um `NaN` chegar na consulta.
+
+---
 
 Três decisões de implementação que o desenho não previa:
 
@@ -92,7 +163,7 @@ depois abrir modal. Então o fluxo é sempre:
 
 ---
 
-## Decisão 2: todo comando abre modal
+## Decisão 2: todo comando que recebe texto abre modal
 
 Não é preferência estética. São dois problemas concretos:
 
@@ -104,6 +175,9 @@ real que medimos, com 37 itens de loot, tem **~1.460 caracteres**. Folga de quas
 **Argumento de slash command aparece no canal.** O código de vínculo do `/cadastro` vazaria para
 quem estivesse olhando. O que se digita em modal ninguém mais vê.
 
+Note o limite deste argumento: ele vale para **segredo**, não para tudo. Nome de pasta não é segredo,
+e por isso `/viewstats pasta:` pôde virar opção com autocomplete sem problema nenhum.
+
 ---
 
 ## Os comandos
@@ -114,25 +188,39 @@ quem estivesse olhando. O que se digita em modal ninguém mais vê.
 /addhunt  →  modal
   ├── Personagem      (linha única)
   ├── Local da hunt   (linha única)
+  ├── Pasta           (String Select, só se as pastas couberem na janela de 3 s)
   └── Hunt Analyser   (parágrafo, max_length 4000)
 ```
+
+O analyzer é o **último** de propósito: rótulos curtos em cima, campo de colar embaixo. Quem abre o
+modal já chega com o texto na área de transferência.
 
 Faz o mesmo que `importarSessao` em `app/hunts/acoes.ts`: parseia, resolve os lookups, grava a
 sessão e as linhas de detalhe. Responde com embed de confirmação.
 
 - **Duplicata** já é tratada pelo schema: `unique (usuario_id, inicio)` devolve `23505`, que vira
   "esta sessão já foi importada".
-- **Personagem não existe no schema hoje** — ver "Delta de schema".
+- **Pasta** entrou em 2026-09-21 e fechou o buraco principal: antes, toda hunt vinda do Discord caía
+  em "Sem pasta" e só dava para arquivar abrindo o site. O seletor é **opcional** (`min_values: 0`),
+  porque obrigar a escolher tornaria impossível importar sem decidir onde guardar.
+- A confirmação nomeia a pasta. Escolher no seletor e não ver onde a hunt foi parar seria ato de fé.
 - Opcional: validar o nome contra `/v4/character/{name}` da TibiaData, que confirma a existência e
   ainda traz mundo, vocação e level. Custa uma chamada dentro da janela adiada.
 
 ### `/viewstats` — os números da tela, em embed
 
 ```
-/viewstats [periodo: semana | semana passada | mes | tudo] [personagem]
+/viewstats [periodo] [pasta] [personagem] [publico]
 ```
 
-Sem filtro o comando só sabe responder "semana atual", e isso vai faltar na primeira semana de uso.
+**O período continua existindo no bot** (decidido em 2026-09-21), mesmo tendo saído da lateral do
+site. Os dois fatos não se contradizem: o site removeu uma *lista de navegação* que misturava
+granularidades sobrepostas; a pergunta "como foi minha semana", feita do celular, continua boa — e o
+bot é o único lugar onde ela ainda cabe.
+
+Quando pasta e personagem aparecem juntos, a **pasta ganha o título** e o personagem vai para o
+rodapé. Nenhum filtro pode ficar invisível: número filtrado que se apresenta como total é a pior
+saída possível.
 
 Conteúdo: o mesmo de `/hunts` — profit, loot, supplies, XP e XP Raw, tempo, mobs mortos, hunts mais
 caçadas. **As regras de cálculo são as mesmas e não se negociam**: toda taxa é `Σ total / Σ horas`,
@@ -152,6 +240,34 @@ argumento antes de responder, não dentro do `after()`.
 O filtro implementado é `semana` (padrão) · `semana-passada` · `mes` · `tudo`. As fronteiras são as
 do jogo, não as do calendário civil: a semana abre no server save de segunda, e o mês no server save
 do dia 1 — uma hunt às 09:00 de Berlim do dia 1 pertence ao último dia do mês anterior.
+
+### `/meta` — o progresso das pastas
+
+```
+/meta [pasta] [publico]
+```
+
+Implementado em 2026-09-21. É a informação que só passou a existir com as pastas, e a mais
+comparável do produto: quanto falta para o alvo e quantas hunts nisso, no ritmo da própria pasta.
+
+Só entram pastas **com** meta — pasta sem meta não tem o que medir, e listá-la com um traço encheria
+o embed de linhas que não respondem nada. O `/viewstats` já mostra o profit delas.
+
+Regras que vêm de `lib/meta.ts` e não se afrouxam aqui:
+
+- **A meta guarda valor + unidade**, nunca o equivalente em gp. 500 TC continuam 500 TC quando o
+  preço muda; o alvo em gold é recalculado ao preço vigente.
+- **O que falta sai na unidade da meta.** Quem pediu 500 TC quer ler "faltam 167 TC", não
+  "faltam 1.000.000 gp".
+- **Sem preço da TC configurado, meta em TC não tem alvo** e o embed diz isso. Nenhuma API publica
+  preço de mercado (diretriz 24), então inventar cotação seria apresentar chute como número.
+- **Profit negativo não faz a barra andar para trás**, e zero hunts não vira estimativa de ritmo —
+  `huntsRestantes` devolve `null` e o embed escreve "sem ritmo para estimar".
+
+O preço vem de `config_mundo`, que é **por mundo**, e o bot não sabe de qual mundo se trata: quem
+pergunta é um comando do Discord, não uma tela com personagem selecionado. Na falta dessa
+informação usa-se o **menor** preço configurado — erra para o lado conservador, mostrando a meta como
+mais perto do que está, e nunca inventa um número que o usuário não escreveu.
 
 ### `/ranking` — o que justifica o bot existir
 
@@ -358,8 +474,10 @@ O que **não** deu para confirmar na documentação e precisa de teste na implem
    sobre quebra de linha. Idem: o modal resolve independente da resposta.
 3. ~~**O proxy de imagem do Discord leva 403 do `static.tibia.com`?**~~ Deixou de importar: o bot
    não mostra sprites (armadilha 1).
-4. **Quantos componentes cabem num modal.** A referência de componentes não explicita; sabemos que
-   mensagem aceita até 40. Três campos, que é o que `/addhunt` precisa, está seguro.
+4. ~~**Quantos componentes cabem num modal.**~~ **Cinco**, confirmado em 2026-09-21 na referência de
+   interações: *"Between 1 and 5 (inclusive) components that make up the modal"*. O `/addhunt` com
+   seletor de pasta usa quatro. `LIMITES.MODAL_COMPONENTES` corta em 5, e há teste — passar disso é
+   `400` do Discord e o comando morre sem mensagem útil.
 5. ~~**O segredo HS256 legado ainda é aceito neste projeto Supabase?**~~ **Sim, verificado em
    2026-09-17** com `scripts/checar-jwt.ts`. Ver "O que a implementação descobriu".
 6. ~~**`after()` segura a instância na Vercel até o `PATCH` sair?**~~ **Sim.** Verificado em
@@ -380,6 +498,20 @@ descartada:
 | `/addhunt` e `/cadastro` | `type: 9` (modal), sem defer |
 | `/viewstats` | `type: 5` com `flags: 64` (efêmera) |
 | `/viewstats publico:true` | `type: 5` sem flag |
+
+E contra o **Postgres de verdade** (2026-09-21), com `scripts/testar-bot-pastas.ts`, que assina um
+JWT de usuário e passa pelo mesmo caminho do bot:
+
+| O que | Resultado |
+|---|---|
+| `/addhunt` com pasta escolhida | `pasta_id` **relido do banco**, não acreditado no retorno |
+| `/addhunt` sem pasta | cai em "Sem pasta", como antes |
+| `/viewstats pasta:` | só as hunts da pasta; pasta inexistente devolve vazio |
+| `/meta` | soma e progresso conferem com `progressoDaMeta` |
+| apagar a pasta | a hunt **sobrevive** e volta para "Sem pasta" (`on delete set null`) |
+
+A releitura não é zelo: a diretriz 45 nasceu de uma RLS que negava em silêncio e devolvia `200`, e
+era exatamente o retorno da chamada que mentia.
 
 ---
 

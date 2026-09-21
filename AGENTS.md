@@ -34,12 +34,18 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
-**Bot do Discord: NO AR e em uso desde 2026-09-17.** Três comandos (`/cadastro`, `/addhunt`,
-`/viewstats`) num endpoint de HTTP Interactions em `app/api/discord/route.ts`, servido pelo mesmo
-deploy da Vercel — não há processo nem host a mais. `supabase/migrations/0002_bot_discord.sql`
-aplicado e conferido (RLS ligada em toda tabela nova; `sessao_periodo` recriada com
-`personagem_id`). App `Lootibia` registrado no Discord, endpoint validado por ele, comandos
-registrados no servidor com `scripts/registrar-comandos.ts`.
+**Bot do Discord: NO AR desde 2026-09-17, alinhado às pastas em 2026-09-21.** Quatro comandos
+(`/cadastro`, `/addhunt`, `/viewstats`, `/meta`) num endpoint de HTTP Interactions em
+`app/api/discord/route.ts`, servido pelo mesmo deploy da Vercel — não há processo nem host a mais.
+
+O que mudou em 21/09: `/addhunt` ganhou **seletor de pasta dentro do modal** (antes toda hunt vinda
+do Discord caía em "Sem pasta" e só dava para arquivar abrindo o site), `/viewstats` ganhou filtro
+de pasta **sem perder o de período**, e nasceu o `/meta`. A referência de componentes do Discord
+mudou desde setembro e forçou uma migração — ver diretriz 47.
+
+`supabase/migrations/0002_bot_discord.sql` aplicado e conferido (RLS ligada em toda tabela nova;
+`sessao_periodo` recriada com `personagem_id`). App `Lootibia` registrado no Discord, endpoint
+validado por ele, comandos registrados no servidor com `scripts/registrar-comandos.ts`.
 
 Três coisas foram provadas em produção, não presumidas: o Discord **aceitou** a Interactions
 Endpoint URL (ou seja, a verificação Ed25519 responde `200` ao `PING` assinado e `401` ao lixo); o
@@ -71,6 +77,16 @@ qualquer outro domínio no login (`invalid_credentials`, e não rejeição de fo
 
 Falta exercitar de ponta a ponta o desvio do middleware para `/auth/definir-senha`: ele depende de
 uma sessão real, e ninguém entrou ainda com um código.
+
+**Pastas com meta, em implementação desde 2026-09-21.** A semana saiu da tela: quem organiza é a
+PASTA, criada e nomeada pelo usuário, com meta opcional em TC ou gp. Schema em
+`supabase/migrations/0003_pastas_e_metas.sql`. `lib/periodo.ts` **continua de pé** — deixou de ser
+o eixo da interface e virou o motor que sabe a que dia de jogo um instante pertence, do qual
+dependem o `/viewstats` do bot e a cidade do Rashid (diretriz 42).
+
+Novos módulos: [lib/meta.ts](lib/meta.ts) (progresso, conversão TC↔gp),
+[lib/rashid.ts](lib/rashid.ts) (rotação semanal) e [lib/tibiadata.ts](lib/tibiadata.ts) (cliente
+único da API, diretriz 15). Tela de `/config` para personagem e preço da TC.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -104,6 +120,7 @@ node --experimental-strip-types lib/sprites.test.ts
 node --experimental-strip-types lib/discord.test.ts
 node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
+node --experimental-strip-types lib/metaRashid.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -276,6 +293,39 @@ retorna: sem `after()` (que na Vercel vira `waitUntil`), o que vem depois do def
 roda e o usuário fica olhando "pensando…" para sempre. A exceção é o **modal, que precisa ser a
 resposta inicial** — não existe adiar e abrir modal depois.
 
+**47. A referência de componentes do Discord muda — reconferir antes de desenhar interação.** Em
+2026-09-17 o desenho registrou que "modal só aceita campo de texto". Em **2026-09-21 isso já era
+falso**: String Select, Radio Group e Checkbox valem em modal, dentro de uma **Label** (type 18). Foi
+o que permitiu o seletor de pasta do `/addhunt`. A diretriz 14 vale para o Discord e vale também
+para o **nosso próprio doc**: ele envelhece.
+
+Junto veio uma depreciação que nos atingiu — *"Action Row with Text Inputs in modals are now
+deprecated"* — e ela **muda o formato do submit**:
+
+```
+Label (atual):  { type: 18, component:  { type: 4, custom_id, value  } }
+Action Row:     { type: 1,  components: [{ type: 4, custom_id, value }] }
+```
+
+Singular contra plural. Um parser que só conheça `components[]` devolve `null` para **todo** campo,
+sem erro nenhum — o comando responderia "cole o texto do Hunt Analyser" para quem acabou de colar.
+`componentesDoModal` entende os dois, porque um modal aberto antes de um deploy pode ser submetido
+depois dele.
+
+E `value` é de Text Input; String Select devolve `values`, um array, mesmo com escolha única. Daí
+`campoDoModal` e `selecaoDoModal` serem funções separadas, com teste cruzado provando que cada uma
+devolve `null` para o tipo da outra.
+
+**48. Modal não adia, então o que ele precisa do banco corre contra um relógio.** `/addhunt` responde
+modal, e modal **tem de ser a resposta inicial** (diretriz 35). Montar o seletor exige buscar as
+pastas. Medido em 21/09: cold start até 1,49 s + primeira ida ao Supabase até 0,85 s = **2,34 s dos
+3 s**, e a medição saiu de fora da região da função.
+
+Por isso `dentroDoOrcamento()`: a busca corre contra 1,2 s e o que perder é descartado, não esperado.
+Estourado o prazo, o modal abre **sem** o seletor e a hunt cai em "Sem pasta" — o comportamento de
+antes. Degradar é ruim; "a aplicação não respondeu" é pior. Qualquer campo novo que dependa do banco
+entra por esse mesmo funil.
+
 **36. A assinatura Ed25519 é verificada sobre o corpo CRU.** Ler com `req.text()` e só então
 `JSON.parse`. Reserializar o objeto muda o texto e invalida a assinatura. Devolver `401` para
 assinatura inválida não é zelo: o Discord manda requisições quebradas de propósito e recusa
@@ -350,3 +400,74 @@ Duas armadilhas irmãs, do mesmo episódio:
   (ES256), `getClaims()` busca o JWKS na rede — ~750 ms medidos — e em instância fria isso falha.
   Aí vem `error` preenchido com o cookie ainda válido; tratar como deslogado vira soluço de rede
   em sessão perdida. Sem sessão é `data` e `error` os dois nulos, e só isso manda para o login.
+
+**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21, e a tentação
+seguinte é apagar o motor de dia do jogo. Não apague: ele é quem sabe que **o dia de Tibia vira no
+server save**, às 10:00 de Berlim, e disso dependem o `/viewstats` do bot e a cidade do Rashid.
+
+O Rashid muda de cidade no server save, não à meia-noite. Com `Date.getDay()` ele ficaria errado
+**10 horas por dia, todo dia** — às 08:00 de uma terça ele ainda está na cidade de segunda.
+`lib/metaRashid.test.ts` trava exatamente esse caso.
+
+A rotação é arquivo versionado e não chamada de API, pelo motivo da diretriz 33: a TibiaData **não
+tem endpoint de NPC** (conferido nos 20 caminhos da v4), e sete strings que nunca mudam não
+justificam dependência de rede no caminho da requisição. A origem é o TibiaWiki, onde os campos
+`city`…`city7` e a prosa de `notes` concordam entre si.
+
+**43. A TibiaData tem QUATRO formatos de resposta, não um.** A tabela está no topo de
+`lib/tibiadata.ts`, e três dos quatro só apareceram batendo na API de verdade:
+
+| Caso | HTTP | Corpo |
+|---|---|---|
+| achou | 200 | envelope, `information.status.http_code = 200` |
+| personagem não existe | **502** | `error code: 502` em **texto puro**, sem envelope |
+| nome inválido | 422 | `{"message":"…"}` em JSON, sem envelope |
+| mundo não existe | 200 | envelope com `status.error = 11002` |
+
+"Não existe" é **resposta**, não falha: devolver `null`, nunca lançar. Tratar o 502 como erro faz
+"personagem não encontrado" virar "a TibiaData está fora do ar", e o usuário vai conferir a
+conexão em vez do nome que digitou.
+
+**44. Boostado do dia e gente online são buscados PELO NAVEGADOR.** Mudam rápido demais para
+virar arquivo versionado (diretriz 33) e com frequência demais para o servidor rebuscar a cada
+requisição (diretriz 17). A TibiaData responde `Access-Control-Allow-Origin: *` — verificado —,
+então o navegador busca direto, o cache HTTP dele respeita o `max-age` que a API manda, e o nosso
+servidor não entra na conta. Busca de personagem é o oposto: acontece uma vez, numa ação de
+usuário, e por isso roda no servidor.
+
+**45. RLS sem política de `update` nega EM SILÊNCIO — e o PostgREST responde sucesso.** Aconteceu
+em 2026-09-21: `sessao` tinha select, insert e delete desde o 0001, e nada mais. Mover uma hunt
+para uma pasta é `update sessao set pasta_id`; o Postgres não encontrava linha alguma que a
+política permitisse tocar, atualizava zero linhas, e a API devolvia **200 sem erro**. A tela não
+tinha como saber, e o sintoma era "clico e não acontece nada".
+
+Ao criar tabela ou ao passar a editar uma coluna que ninguém editava, conferir os **quatro** verbos:
+
+```sql
+select tablename, cmd, policyname from pg_policies
+ where schemaname = 'public' order by tablename, cmd;
+```
+
+Toda política de `update` leva `using` **e** `with check`. Só com `using`, eu alcanço a minha
+linha e gravo nela o `usuario_id` de outra pessoa.
+
+**46. Regra que vive no Postgres precisa de teste que fale com o Postgres.** Nenhum teste de
+`lib/` pegaria a diretriz 45: não há lógica errada, o `tsc` está feliz e a chamada "funciona".
+`scripts/testar-pastas.ts` existe para essa classe — ele assina um JWT de usuário (igual ao bot,
+diretriz 34) e exercita a RLS pelo mesmo caminho da tela:
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+node --experimental-strip-types --env-file=.env.local scripts/testar-bot-pastas.ts
+```
+
+O segundo cobre o **bot**, que chega no mesmo banco por outro caminho: a tela grava `pasta_id` num
+`update` disparado por clique, o bot grava no `insert` da importação. Política faltando num dos dois
+não aparece no outro.
+
+Duas regras: eles **releem do banco** em vez de confiar no retorno da chamada — era exatamente o
+retorno que mentia —, e **não entram na diretriz 3**, porque precisam de credencial e de rede, e a
+lista de validação tem de rodar em qualquer máquina.
+
+Se precisar saber se a culpa é da RLS, repita a operação com a chave secreta, que a ignora: se
+funcionar lá e não com o JWT, é política faltando.

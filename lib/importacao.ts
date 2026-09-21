@@ -24,6 +24,14 @@ export interface PedidoDeImportacao {
   spot?: string | null;
   /** Nome do personagem. Também não vem do jogo. */
   personagem?: string | null;
+  /**
+   * Pasta onde arquivar. Nulo cai em "Sem pasta", que e o padrao.
+   *
+   * Id, nao nome: a pasta ja existe (o usuario criou no site ou escolheu no
+   * seletor do modal). Criar pasta por nome aqui seria o oposto do que a tela
+   * faz — e um erro de digitacao viraria pasta nova em silencio.
+   */
+  pastaId?: number | null;
   /** Fuso IANA de quem jogou. Ver `instanteDoRelogioLocal`. */
   fuso: string;
   /** Dono da sessão. Tem de bater com o `auth.uid()` do cliente, ou a RLS recusa. */
@@ -37,6 +45,7 @@ export type ResultadoDaImportacao =
       duracaoSegundos: number;
       monstros: number;
       itens: number;
+      pastaId: number | null;
       loot: number;
       supplies: number;
       profit: number;
@@ -179,6 +188,7 @@ export async function importarSessao(
         healing: sessao.healing,
         spot_id: spotId,
         personagem_id: personagemId,
+        pasta_id: pedido.pastaId ?? null,
       })
       .select("id")
       .single();
@@ -227,6 +237,7 @@ export async function importarSessao(
       duracaoSegundos: sessao.duracaoSegundos,
       monstros: sessao.monstrosMortos.length,
       itens: sessao.itensLootados.length,
+      pastaId: pedido.pastaId ?? null,
       loot: sessao.loot,
       supplies: sessao.supplies,
       // `balance` é derivado: conferido no parse, nunca persistido (diretriz 6).
