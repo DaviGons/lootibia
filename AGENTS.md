@@ -72,6 +72,16 @@ qualquer outro domínio no login (`invalid_credentials`, e não rejeição de fo
 Falta exercitar de ponta a ponta o desvio do middleware para `/auth/definir-senha`: ele depende de
 uma sessão real, e ninguém entrou ainda com um código.
 
+**Pastas com meta, em implementação desde 2026-09-21.** A semana saiu da tela: quem organiza é a
+PASTA, criada e nomeada pelo usuário, com meta opcional em TC ou gp. Schema em
+`supabase/migrations/0003_pastas_e_metas.sql`. `lib/periodo.ts` **continua de pé** — deixou de ser
+o eixo da interface e virou o motor que sabe a que dia de jogo um instante pertence, do qual
+dependem o `/viewstats` do bot e a cidade do Rashid (diretriz 42).
+
+Novos módulos: [lib/meta.ts](lib/meta.ts) (progresso, conversão TC↔gp),
+[lib/rashid.ts](lib/rashid.ts) (rotação semanal) e [lib/tibiadata.ts](lib/tibiadata.ts) (cliente
+único da API, diretriz 15). Tela de `/config` para personagem e preço da TC.
+
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
 lâmina em `--primary`. Geometria em [lib/marca.ts](lib/marca.ts), componentes em
@@ -104,6 +114,7 @@ node --experimental-strip-types lib/sprites.test.ts
 node --experimental-strip-types lib/discord.test.ts
 node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
+node --experimental-strip-types lib/metaRashid.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -350,3 +361,69 @@ Duas armadilhas irmãs, do mesmo episódio:
   (ES256), `getClaims()` busca o JWKS na rede — ~750 ms medidos — e em instância fria isso falha.
   Aí vem `error` preenchido com o cookie ainda válido; tratar como deslogado vira soluço de rede
   em sessão perdida. Sem sessão é `data` e `error` os dois nulos, e só isso manda para o login.
+
+**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21, e a tentação
+seguinte é apagar o motor de dia do jogo. Não apague: ele é quem sabe que **o dia de Tibia vira no
+server save**, às 10:00 de Berlim, e disso dependem o `/viewstats` do bot e a cidade do Rashid.
+
+O Rashid muda de cidade no server save, não à meia-noite. Com `Date.getDay()` ele ficaria errado
+**10 horas por dia, todo dia** — às 08:00 de uma terça ele ainda está na cidade de segunda.
+`lib/metaRashid.test.ts` trava exatamente esse caso.
+
+A rotação é arquivo versionado e não chamada de API, pelo motivo da diretriz 33: a TibiaData **não
+tem endpoint de NPC** (conferido nos 20 caminhos da v4), e sete strings que nunca mudam não
+justificam dependência de rede no caminho da requisição. A origem é o TibiaWiki, onde os campos
+`city`…`city7` e a prosa de `notes` concordam entre si.
+
+**43. A TibiaData tem QUATRO formatos de resposta, não um.** A tabela está no topo de
+`lib/tibiadata.ts`, e três dos quatro só apareceram batendo na API de verdade:
+
+| Caso | HTTP | Corpo |
+|---|---|---|
+| achou | 200 | envelope, `information.status.http_code = 200` |
+| personagem não existe | **502** | `error code: 502` em **texto puro**, sem envelope |
+| nome inválido | 422 | `{"message":"…"}` em JSON, sem envelope |
+| mundo não existe | 200 | envelope com `status.error = 11002` |
+
+"Não existe" é **resposta**, não falha: devolver `null`, nunca lançar. Tratar o 502 como erro faz
+"personagem não encontrado" virar "a TibiaData está fora do ar", e o usuário vai conferir a
+conexão em vez do nome que digitou.
+
+**44. Boostado do dia e gente online são buscados PELO NAVEGADOR.** Mudam rápido demais para
+virar arquivo versionado (diretriz 33) e com frequência demais para o servidor rebuscar a cada
+requisição (diretriz 17). A TibiaData responde `Access-Control-Allow-Origin: *` — verificado —,
+então o navegador busca direto, o cache HTTP dele respeita o `max-age` que a API manda, e o nosso
+servidor não entra na conta. Busca de personagem é o oposto: acontece uma vez, numa ação de
+usuário, e por isso roda no servidor.
+
+**45. RLS sem política de `update` nega EM SILÊNCIO — e o PostgREST responde sucesso.** Aconteceu
+em 2026-09-21: `sessao` tinha select, insert e delete desde o 0001, e nada mais. Mover uma hunt
+para uma pasta é `update sessao set pasta_id`; o Postgres não encontrava linha alguma que a
+política permitisse tocar, atualizava zero linhas, e a API devolvia **200 sem erro**. A tela não
+tinha como saber, e o sintoma era "clico e não acontece nada".
+
+Ao criar tabela ou ao passar a editar uma coluna que ninguém editava, conferir os **quatro** verbos:
+
+```sql
+select tablename, cmd, policyname from pg_policies
+ where schemaname = 'public' order by tablename, cmd;
+```
+
+Toda política de `update` leva `using` **e** `with check`. Só com `using`, eu alcanço a minha
+linha e gravo nela o `usuario_id` de outra pessoa.
+
+**46. Regra que vive no Postgres precisa de teste que fale com o Postgres.** Nenhum teste de
+`lib/` pegaria a diretriz 45: não há lógica errada, o `tsc` está feliz e a chamada "funciona".
+`scripts/testar-pastas.ts` existe para essa classe — ele assina um JWT de usuário (igual ao bot,
+diretriz 34) e exercita a RLS pelo mesmo caminho da tela:
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+```
+
+Duas regras: ele **relê do banco** em vez de confiar no retorno da chamada — era exatamente o
+retorno que mentia —, e **não entra na diretriz 3**, porque precisa de credencial e de rede, e a
+lista de validação tem de rodar em qualquer máquina.
+
+Se precisar saber se a culpa é da RLS, repita a operação com a chave secreta, que a ignora: se
+funcionar lá e não com o JWT, é política faltando.
