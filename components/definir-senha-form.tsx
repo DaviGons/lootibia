@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
@@ -26,7 +25,6 @@ export function DefinirSenhaForm({
   const [jaTinhaSenha, setJaTinhaSenha] = useState<boolean | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const router = useRouter();
 
   useEffect(() => {
     createClient()
@@ -56,12 +54,18 @@ export function DefinirSenhaForm({
       });
       if (error) throw error;
 
-      // O middleware lê a flag das claims do JWT. Sem renovar, o token em mãos
-      // ainda diz `senha_definida: false` e a próxima navegação volta para cá.
+      // `updateUser` não reemite o access token: o que está no cookie ainda diz
+      // `senha_definida: false`. Sem renovar, o middleware lê a flag velha e
+      // devolve o usuário para cá — o laço que fazia o primeiro acesso exigir
+      // vários F5.
       await supabase.auth.refreshSession();
 
-      router.push("/hunts");
-      router.refresh();
+      // Navegação DURA, e não `router.push`. O `<Link href="/hunts">` da marca
+      // faz o Next pré-buscar `/hunts` enquanto a sessão ainda é a antiga, e
+      // `push` serve essa cópia do Router Cache sem passar pelo middleware com
+      // o cookie novo. `assign` ignora esse cache. O refresh já gravou o cookie
+      // de forma síncrona (`document.cookie`), então aqui ele já está valendo.
+      window.location.assign("/hunts");
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Não deu para salvar a senha.");
       setEnviando(false);

@@ -45,12 +45,30 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getClaims() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
   const user = data?.claims;
   const caminho = request.nextUrl.pathname;
 
-  if (caminho !== "/" && !user && !caminho.startsWith("/auth")) {
-    // no user, potentially respond by redirecting the user to the login page
+  /**
+   * Os dois jeitos de `getClaims()` não devolver usuário são MUITO diferentes,
+   * e tratá-los igual era o que fazia o primeiro acesso exigir vários F5.
+   *
+   * Sem cookie nenhum, ele devolve `data: null` com `error: null` — deslogado
+   * de verdade. Mas o projeto usa chave **assimétrica (ES256)**, e aí verificar
+   * a assinatura exige buscar o JWKS em `/.well-known/jwks.json` — uma ida à
+   * rede de ~750 ms que, em instância fria da Vercel, pode falhar. Nesse caso
+   * vem `error` preenchido, o cookie do usuário continua perfeitamente válido,
+   * e mandá-lo para o login é transformar soluço de rede em sessão perdida.
+   *
+   * Deixar passar não abre buraco: este desvio é conveniência de navegação, não
+   * fronteira de segurança. Quem isola dado é a RLS, e a própria `/hunts` chama
+   * `getUser()` — que valida contra o servidor do Supabase — e mostra "faça
+   * login" se não houver ninguém. Falhar para o lado de deixar passar troca um
+   * laço de redirecionamento por uma tela que explica o que houve.
+   */
+  const deslogado = !user && !error;
+
+  if (caminho !== "/" && deslogado && !caminho.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);

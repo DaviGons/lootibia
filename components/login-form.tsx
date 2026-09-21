@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
@@ -15,7 +14,6 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const router = useRouter();
 
   const entrar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,12 +40,27 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 
       // Quem entrou com o código de ativação ainda não tem senha própria. O
       // middleware barra de qualquer forma; mandar direto evita um salto a mais.
-      router.push(
-        senhaFoiDefinida(data.user?.user_metadata) ? "/hunts" : "/auth/definir-senha",
+      const destino = senhaFoiDefinida(data.user?.user_metadata)
+        ? "/hunts"
+        : "/auth/definir-senha";
+
+      // Navegação DURA. `router.push` serviria a cópia que o Next pré-buscou
+      // enquanto ninguém estava logado, sem passar pelo middleware com o cookie
+      // recém-gravado. Era isto que fazia o primeiro acesso precisar de F5.
+      // Uma carga de página inteira por login é preço barato.
+      window.location.assign(destino);
+      return; // a página vai embora; não faz sentido reabilitar o botão
+    } catch (e: unknown) {
+      // SÓ credencial errada vira a frase genérica. Queda de rede, projeto
+      // Supabase pausado ou erro de servidor apareciam como "usuário ou senha
+      // inválidos" e mandavam conferir o código — o lugar errado para procurar.
+      // Erro sem `code` é rede, então também não é credencial.
+      const codigo = (e as { code?: string })?.code;
+      setErro(
+        codigo === "invalid_credentials"
+          ? GENERICO
+          : `Não deu para entrar agora${codigo ? ` (${codigo})` : ""}. Tente de novo em instantes.`,
       );
-    } catch {
-      setErro(GENERICO);
-    } finally {
       setEnviando(false);
     }
   };

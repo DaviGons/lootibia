@@ -52,20 +52,25 @@ Em aberto: o de-para de plural dos
 com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
 bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
 
-**Login por usuário e senha — código escrito em 2026-09-19, ATIVAÇÃO PENDENTE.** Não existe
+**Login por usuário e senha desde 2026-09-19.** Não existe
 cadastro: o Davi cria as contas com `scripts/criar-usuario.ts`, que sorteia um código de ativação.
 O código é a senha temporária; o site obriga a trocar no primeiro acesso. O modelo inteiro está em
 [lib/conta.ts](lib/conta.ts) e o que não se negocia, nas diretrizes 38 a 40.
 
-Falta, e sem isso o login novo não funciona para ninguém: rodar
-`supabase/limpar-contas.sql` (as contas antigas têm e-mail de verdade e nenhuma passa por
-`usuarioDoEmail`), desligar **"Allow new users to sign up"** e **"Confirm email"** no painel, e pôr
-`SUPABASE_SECRET_KEY` no `.env.local`.
+`supabase/limpar-contas.sql` foi rodado e as contas antigas, de e-mail e senha, não existem mais.
 
-Verificado contra o projeto real: o GoTrue trata `@lootibia.invalid` como qualquer outro domínio no
-login (`invalid_credentials`, não rejeição de formato). **Não verificado:** se `admin.createUser`
-aceita o mesmo domínio — exige a chave secreta. Se recusar, o sintoma é a primeira execução de
-`criar-usuario.ts` falhar, e o conserto é a constante `DOMINIO` em `lib/conta.ts`.
+**O cadastro pela API já está desligado** — medido em 2026-09-19: `POST /auth/v1/signup` responde
+`422 signup_disabled`. A diretriz 38 continua valendo como aviso para quem mexer no painel depois,
+não como pendência. O `admin.createUser` do script não é afetado: a API de admin ignora essa
+trava.
+
+Duas coisas medidas contra o projeto real, não presumidas: o GoTrue trata `@lootibia.invalid` como
+qualquer outro domínio no login (`invalid_credentials`, e não rejeição de formato), e o
+`admin.createUser` **aceita** esse domínio — a primeira conta foi criada por
+`scripts/criar-usuario.ts` e volta por `usuarioDoEmail` com o nome certo.
+
+Falta exercitar de ponta a ponta o desvio do middleware para `/auth/definir-senha`: ele depende de
+uma sessão real, e ninguém entrou ainda com um código.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -313,9 +318,9 @@ Modelo completo em [lib/conta.ts](lib/conta.ts).
 
 **38. Não existe cadastro, e desligar isso no painel faz parte da mudança.** Remover a tela de
 `/auth/sign-up` é decoração: o endpoint `POST /auth/v1/signup` do GoTrue continua aceitando quem
-souber o caminho. **"Allow new users to sign up" tem de ficar desligado** no painel do Supabase, e
-"Confirm email" também — o domínio sintético `@lootibia.invalid` não existe por definição (RFC
-6761) e nenhuma confirmação chegaria. Passo a passo em `supabase/limpar-contas.sql`.
+souber o caminho. **"Allow new users to sign up" tem de ficar desligado** no painel do Supabase — hoje está, e
+foi medido (`422 signup_disabled`), mas quem religar reabre o cadastro sem tocar numa linha de
+código. A API de admin, que o script usa, ignora essa trava e continua criando conta normalmente.
 
 **39. `SUPABASE_SECRET_KEY` nunca vai para a Vercel.** Ela ignora a RLS inteira e serve só a
 `scripts/criar-usuario.ts`, rodado na máquina do Davi. O site em produção não precisa dela: o
@@ -328,3 +333,20 @@ O que ele ganha é continuar com uma senha que o Davi mandou por Discord; não g
 ninguém, porque quem isola continua sendo a RLS. A segurança real está no código de ativação ser
 um segredo de ~49 bits sorteado com `crypto.getRandomValues`. Não transformar essa flag em
 autorização de coisa alguma.
+
+**41. Transição de autenticação usa navegação DURA, nunca `router.push`.** Login, definir senha e
+sair trocam `window.location.assign`. `router.push` é navegação do cliente: serve o que estiver no
+Router Cache do Next — inclusive uma cópia pré-buscada enquanto a sessão era outra — e pode não
+passar pelo middleware com o cookie recém-gravado. O sintoma é o primeiro acesso exigir vários F5
+até "destravar", que é o que aconteceu em 2026-09-21. Uma carga de página inteira por login é
+preço barato.
+
+Duas armadilhas irmãs, do mesmo episódio:
+
+- **`updateUser` não reemite o access token.** Depois de trocar a senha, o JWT no cookie ainda diz
+  `senha_definida: false` e o middleware devolve o usuário para a tela de senha. Tem de chamar
+  `refreshSession()` antes de navegar.
+- **O middleware distingue "sem sessão" de "não consegui verificar".** Com chave assimétrica
+  (ES256), `getClaims()` busca o JWKS na rede — ~750 ms medidos — e em instância fria isso falha.
+  Aí vem `error` preenchido com o cookie ainda válido; tratar como deslogado vira soluço de rede
+  em sessão perdida. Sem sessão é `data` e `error` os dois nulos, e só isso manda para o login.
