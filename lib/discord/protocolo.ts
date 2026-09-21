@@ -39,14 +39,29 @@ export const TipoDeResposta = {
   DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 5,
   DEFERRED_UPDATE_MESSAGE: 6,
   UPDATE_MESSAGE: 7,
+  /** Sugestões de autocomplete. Não adia: ou responde em 3 s, ou some. */
+  AUTOCOMPLETE: 8,
   MODAL: 9,
 } as const;
 
-/** Componentes. Só os três que o bot usa. */
+/**
+ * Componentes. Só os que o bot usa.
+ *
+ * `LABEL` é o que mudou desde a primeira versão deste arquivo. A referência de
+ * componentes hoje diz, textualmente: *"Action Row with Text Inputs in modals
+ * are now deprecated"* e *"Going forward all Text Inputs should be placed
+ * inside a Label component"*. Conferido em 2026-09-21, não presumido do que
+ * estava escrito aqui em setembro (diretriz 14).
+ *
+ * O `LABEL` é quem carrega o texto do campo agora — o `label` do próprio Text
+ * Input está depreciado em favor de `label` + `description` da Label.
+ */
 export const TipoDeComponente = {
   ACTION_ROW: 1,
   BUTTON: 2,
+  STRING_SELECT: 3,
   TEXT_INPUT: 4,
+  LABEL: 18,
 } as const;
 
 /** Campo de modal: uma linha ou parágrafo. */
@@ -86,18 +101,34 @@ export interface OpcaoDeComando {
   name: string;
   type: number;
   value?: string | number | boolean;
+  /** Numa interação de autocomplete, marca a opção que o usuário está digitando. */
+  focused?: boolean;
 }
 
+/**
+ * Um componente como ele volta no submit do modal.
+ *
+ * `value` é de Text Input; `values` é de String Select (um array, mesmo quando
+ * só se escolhe uma opção). Confundir os dois devolve `undefined` em silêncio.
+ */
 export interface CampoDeModal {
   type: number;
-  custom_id: string;
-  value: string;
+  custom_id?: string;
+  value?: string;
+  values?: string[];
+  /** Presente quando o componente veio embrulhado numa Label (type 18). */
+  component?: CampoDeModal;
+  /** Presente no formato legado, com Action Row. */
+  components?: CampoDeModal[];
 }
 
-export interface LinhaDeComponentes {
-  type: number;
-  components: CampoDeModal[];
-}
+/**
+ * Um item do array `data.components` do submit.
+ *
+ * Hoje são Labels (`component`, singular). No formato legado eram Action Rows
+ * (`components`, plural). `componentesDoModal` achata os dois.
+ */
+export type LinhaDeComponentes = CampoDeModal;
 
 export interface Interacao {
   id: string;
@@ -140,6 +171,20 @@ export function opcaoTexto(i: Interacao, nome: string): string | null {
   return String(o.value).trim() || null;
 }
 
+/**
+ * Numa interação de autocomplete, qual opção o usuário está digitando e o que
+ * ele já escreveu.
+ *
+ * O Discord manda TODAS as opções do comando e marca uma com `focused`. Sem
+ * olhar essa marca, um comando com dois campos autocompletáveis sugeriria
+ * pastas enquanto a pessoa digita o nome do personagem.
+ */
+export function opcaoFocada(i: Interacao): { nome: string; texto: string } | null {
+  const o = i.data?.options?.find((x) => x.focused);
+  if (!o) return null;
+  return { nome: o.name, texto: String(o.value ?? "").trim() };
+}
+
 /** Valor booleano de uma opção. Ausente devolve o padrão informado. */
 export function opcaoBooleana(i: Interacao, nome: string, padrao: boolean): boolean {
   const o = i.data?.options?.find((x) => x.name === nome);
@@ -147,18 +192,54 @@ export function opcaoBooleana(i: Interacao, nome: string, padrao: boolean): bool
 }
 
 /**
- * Valor de um campo de modal pelo `custom_id`.
+ * Achata o `data.components` do submit, qualquer que seja o embrulho.
  *
- * Os campos chegam aninhados em linhas de componentes, uma por campo. Campo
- * deixado em branco chega como string vazia, não some — por isso o `|| null`.
+ * São DOIS formatos, e o bot precisa entender os dois:
+ *
+ *   Label (atual):  { type: 18, component:  { type: 4, custom_id, value } }
+ *   Action Row:     { type: 1,  components: [{ type: 4, custom_id, value }] }
+ *
+ * Repare no singular contra o plural. Um parser que só conhecesse
+ * `components[]` — como este arquivo tinha até 2026-09-21 — devolveria `null`
+ * para todo campo de um modal montado com Label, sem erro nenhum: o comando
+ * responderia "cole o texto do Hunt Analyser" para quem acabou de colar.
+ *
+ * Trata o legado porque um modal aberto antes de um deploy pode ser submetido
+ * depois dele. A janela é de minutos, mas existe.
+ */
+function componentesDoModal(i: Interacao): CampoDeModal[] {
+  const saida: CampoDeModal[] = [];
+  const visitar = (c: CampoDeModal | undefined) => {
+    if (!c) return;
+    if (c.custom_id) saida.push(c);
+    if (c.component) visitar(c.component);
+    for (const filho of c.components ?? []) visitar(filho);
+  };
+  for (const linha of i.data?.components ?? []) visitar(linha);
+  return saida;
+}
+
+/**
+ * Valor de um campo de texto do modal, pelo `custom_id`.
+ *
+ * Campo opcional deixado em branco chega como string vazia, não some da lista —
+ * por isso o `|| null`.
  */
 export function campoDoModal(i: Interacao, customId: string): string | null {
-  for (const linha of i.data?.components ?? []) {
-    for (const campo of linha.components ?? []) {
-      if (campo.custom_id === customId) return campo.value?.trim() || null;
-    }
-  }
-  return null;
+  const c = componentesDoModal(i).find((x) => x.custom_id === customId);
+  return c?.value?.trim() || null;
+}
+
+/**
+ * Opção escolhida num String Select do modal.
+ *
+ * O Discord devolve `values`, um array, mesmo quando `max_values` é 1. Aqui só
+ * existem seletores de escolha única, então pega-se o primeiro; nada escolhido
+ * vira `null`, que é o caso do "Sem pasta".
+ */
+export function selecaoDoModal(i: Interacao, customId: string): string | null {
+  const c = componentesDoModal(i).find((x) => x.custom_id === customId);
+  return c?.values?.[0]?.trim() || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +266,18 @@ export const LIMITES = {
   EMBED_CAMPOS: 25,
   /** Descrição do embed. */
   EMBED_DESCRICAO: 4096,
+  /** Componentes de topo num modal. Hoje, uma Label por campo. */
+  MODAL_COMPONENTES: 5,
+  /** Texto da Label que rotula o campo. */
+  LABEL_TEXTO: 45,
+  /** Descrição opcional da Label, abaixo (ou acima) do campo. */
+  LABEL_DESCRICAO: 100,
+  /** Opções num String Select. É o teto de pastas que o seletor comporta. */
+  SELECT_OPCOES: 25,
+  /** Texto do placeholder de um select. */
+  SELECT_PLACEHOLDER: 150,
+  /** `label`, `value` e `description` de uma opção de select. */
+  OPCAO_TEXTO: 100,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -252,19 +345,96 @@ export function adiar(efemera = true) {
   };
 }
 
+/**
+ * Sugestões de autocomplete.
+ *
+ * Não existe adiar aqui: ou a lista sai em 3 s, ou o campo fica sem sugestão.
+ * Por isso quem chama é responsável por não deixar a busca demorar — e por
+ * responder com lista vazia em vez de explodir, que é o que mantém o campo
+ * utilizável (a pessoa ainda pode digitar o nome à mão).
+ */
+export function autocompletar(escolhas: { nome: string; valor: string }[]) {
+  return {
+    type: TipoDeResposta.AUTOCOMPLETE,
+    data: {
+      choices: escolhas.slice(0, LIMITES.SELECT_OPCOES).map((e) => ({
+        name: e.nome.slice(0, LIMITES.OPCAO_TEXTO),
+        value: e.valor.slice(0, LIMITES.OPCAO_TEXTO),
+      })),
+    },
+  };
+}
+
+export interface OpcaoDeSelecao {
+  valor: string;
+  rotulo: string;
+  descricao?: string;
+  padrao?: boolean;
+}
+
+/**
+ * Um campo do modal: texto livre ou escolha entre opções.
+ *
+ * `opcoes` presente vira String Select; ausente, Text Input. Quem chama não
+ * precisa saber de tipo 3 contra tipo 4.
+ */
 export interface CampoDeEntrada {
   id: string;
   rotulo: string;
-  estilo: number;
+  /** Texto de apoio sob o rótulo. Vive na Label, não no campo. */
+  descricao?: string;
+  /** Só para texto: `EstiloDeTexto.CURTO` ou `PARAGRAFO`. */
+  estilo?: number;
   obrigatorio?: boolean;
   tamanhoMaximo?: number;
   exemplo?: string;
   valor?: string;
+  /** Presente ⇒ o campo vira seletor. Até `LIMITES.SELECT_OPCOES`. */
+  opcoes?: OpcaoDeSelecao[];
+}
+
+/** Monta o componente interativo que vai dentro de uma Label. */
+function componenteDoCampo(c: CampoDeEntrada) {
+  if (c.opcoes) {
+    return {
+      type: TipoDeComponente.STRING_SELECT,
+      custom_id: c.id,
+      required: c.obrigatorio ?? false,
+      // `min_values: 0` é o que permite não escolher nada. A documentação é
+      // explícita: com `required` omitido ou true, `min_values` tem de ser >= 1.
+      ...(c.obrigatorio ? {} : { min_values: 0 }),
+      max_values: 1,
+      ...(c.exemplo ? { placeholder: c.exemplo.slice(0, LIMITES.SELECT_PLACEHOLDER) } : {}),
+      options: c.opcoes.slice(0, LIMITES.SELECT_OPCOES).map((o) => ({
+        label: o.rotulo.slice(0, LIMITES.OPCAO_TEXTO),
+        value: o.valor.slice(0, LIMITES.OPCAO_TEXTO),
+        ...(o.descricao ? { description: o.descricao.slice(0, LIMITES.OPCAO_TEXTO) } : {}),
+        ...(o.padrao ? { default: true } : {}),
+      })),
+    };
+  }
+
+  return {
+    type: TipoDeComponente.TEXT_INPUT,
+    custom_id: c.id,
+    style: c.estilo ?? EstiloDeTexto.CURTO,
+    required: c.obrigatorio ?? false,
+    ...(c.tamanhoMaximo ? { max_length: c.tamanhoMaximo } : {}),
+    ...(c.exemplo ? { placeholder: c.exemplo } : {}),
+    ...(c.valor ? { value: c.valor } : {}),
+  };
 }
 
 /**
  * Abre um modal. Precisa ser a resposta INICIAL da interação — ver o comentário
  * de `TipoDeResposta`.
+ *
+ * Cada campo vira uma **Label** (type 18), não uma Action Row: Action Row com
+ * Text Input em modal está depreciada, e select em modal **só** funciona dentro
+ * de Label. Ver o comentário de `TipoDeComponente`.
+ *
+ * O corte em `MODAL_COMPONENTES` não é defensivo à toa: o Discord recusa o
+ * modal inteiro com `400` se passar de 5, e o comando morre sem mensagem útil.
  */
 export function modal(customId: string, titulo: string, campos: CampoDeEntrada[]) {
   return {
@@ -272,20 +442,11 @@ export function modal(customId: string, titulo: string, campos: CampoDeEntrada[]
     data: {
       custom_id: customId,
       title: titulo.slice(0, LIMITES.MODAL_TITULO),
-      components: campos.map((c) => ({
-        type: TipoDeComponente.ACTION_ROW,
-        components: [
-          {
-            type: TipoDeComponente.TEXT_INPUT,
-            custom_id: c.id,
-            label: c.rotulo,
-            style: c.estilo,
-            required: c.obrigatorio ?? false,
-            ...(c.tamanhoMaximo ? { max_length: c.tamanhoMaximo } : {}),
-            ...(c.exemplo ? { placeholder: c.exemplo } : {}),
-            ...(c.valor ? { value: c.valor } : {}),
-          },
-        ],
+      components: campos.slice(0, LIMITES.MODAL_COMPONENTES).map((c) => ({
+        type: TipoDeComponente.LABEL,
+        label: c.rotulo.slice(0, LIMITES.LABEL_TEXTO),
+        ...(c.descricao ? { description: c.descricao.slice(0, LIMITES.LABEL_DESCRICAO) } : {}),
+        component: componenteDoCampo(c),
       })),
     },
   };

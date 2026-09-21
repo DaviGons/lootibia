@@ -20,6 +20,7 @@
  */
 
 import type { ResumoDeHunts } from "../huntAgregado.ts";
+import { progressoDaMeta, rotuloDaMeta, type Meta } from "../meta.ts";
 import { LIMITES, COR, COR_ERRO, type Embed, type CampoDeEmbed } from "./protocolo.ts";
 import { descreverJanela, type JanelaDeTempo } from "./janela.ts";
 
@@ -109,6 +110,8 @@ export interface ContextoDoResumo {
   janela: JanelaDeTempo;
   /** Nome do personagem, se o comando filtrou por um. */
   personagem?: string | null;
+  /** Nome da pasta, se o comando filtrou por uma. */
+  pasta?: string | null;
   /** Nome de quem pediu, para o título quando a resposta é pública. */
   autor?: string | null;
 }
@@ -120,15 +123,24 @@ export interface ContextoDoResumo {
 function embedVazio(ctx: ContextoDoResumo): Embed {
   return {
     title: tituloDe(ctx),
-    description:
-      "Nenhuma hunt importada neste período.\n" +
-      "Use `/addhunt` para colar o texto do Hunt Analyser.",
+    description: ctx.pasta
+      ? `Nenhuma hunt nesta pasta no período.\nEscolha **${ctx.pasta}** no seletor do \`/addhunt\`.`
+      : "Nenhuma hunt importada neste período.\nUse `/addhunt` para colar o texto do Hunt Analyser.",
     color: COR,
     footer: { text: descreverJanela(ctx.janela) },
   };
 }
 
+/**
+ * Título do embed.
+ *
+ * A pasta ganha do personagem quando os dois estão presentes: ela é o recorte
+ * que o usuário escolheu deliberadamente, e é o eixo que o site passou a usar.
+ * O que sobrar aparece no rodapé, para nenhum filtro ficar invisível — um
+ * número filtrado que se apresenta como total é a pior saída possível.
+ */
 function tituloDe(ctx: ContextoDoResumo): string {
+  if (ctx.pasta) return ctx.pasta;
   const quem = ctx.personagem ?? ctx.autor;
   return quem ? `Hunts de ${quem}` : "Hunts";
 }
@@ -222,6 +234,9 @@ export function embedDeResumo(resumo: ResumoDeHunts, ctx: ContextoDoResumo): Emb
  */
 function rodape(resumo: ResumoDeHunts, ctx: ContextoDoResumo): string {
   const partes = [descreverJanela(ctx.janela)];
+  // Filtro que não coube no título não pode sumir: sem isto, "Roshamuul" com
+  // personagem filtrado pareceria a pasta inteira.
+  if (ctx.pasta && ctx.personagem) partes.push(ctx.personagem);
   if (resumo.huntsSemRotulo > 0) {
     const n = resumo.huntsSemRotulo;
     partes.push(`${n} ${n === 1 ? "hunt sem spot" : "hunts sem spot"}`);
@@ -253,6 +268,106 @@ function couberNoTotal(embed: Embed): Embed {
     campos.pop();
   }
   return { ...embed, fields: campos };
+}
+
+// ---------------------------------------------------------------------------
+// /meta
+// ---------------------------------------------------------------------------
+
+/**
+ * Barra de progresso em texto.
+ *
+ * Um embed não tem barra de verdade, e o Discord não renderiza CSS. Blocos
+ * cheios e vazios numa fonte monoespaçada é o que resta — e funciona bem porque
+ * a pergunta é "estou perto?", não "quantos por cento exatos?".
+ *
+ * Doze blocos: o suficiente para a posição significar algo, curto o bastante
+ * para caber ao lado do número no celular.
+ */
+export function barra(fracao: number, blocos = 12): string {
+  const cheios = Math.round(Math.min(Math.max(fracao, 0), 1) * blocos);
+  return "█".repeat(cheios) + "░".repeat(blocos - cheios);
+}
+
+export interface PastaComMeta {
+  nome: string;
+  meta: Meta;
+  profit: number;
+  hunts: number;
+}
+
+/**
+ * Embed do `/meta`: onde cada pasta está em relação ao alvo.
+ *
+ * Só entram pastas COM meta. Pasta sem meta não tem o que medir, e listá-la com
+ * um traço no lugar do progresso encheria o embed de linhas que não respondem
+ * nada — o `/viewstats` já mostra o profit delas.
+ *
+ * `precoTc` nulo significa que o usuário não configurou preço: meta em TC fica
+ * sem alvo em gold, e o embed diz isso em vez de inventar cotação (diretriz 24).
+ */
+export function embedDeMetas(
+  pastas: PastaComMeta[],
+  precoTc: number | null,
+  autor?: string | null,
+): Embed {
+  if (pastas.length === 0) {
+    return {
+      title: autor ? `Metas de ${autor}` : "Metas",
+      description:
+        "Nenhuma pasta com meta.\n" +
+        "Crie uma no site, em **/hunts**, e defina o alvo em Tibia Coin ou em gold.",
+      color: COR,
+    };
+  }
+
+  const campos: CampoDeEmbed[] = [];
+  let faltouPreco = false;
+
+  for (const p of pastas) {
+    const prog = progressoDaMeta(p.meta, p.profit, precoTc, p.hunts);
+
+    if (!prog) {
+      // Só acontece com meta em TC e sem preço configurado.
+      faltouPreco = true;
+      campos.push({
+        name: p.nome,
+        value: `Meta de **${rotuloDaMeta(p.meta)}** — sem preço da TC para converter.`,
+      });
+      continue;
+    }
+
+    const pct = Math.round(prog.fracaoCrua * 100);
+    const linhas = [`\`${barra(prog.fracao)}\` **${pct}%**`];
+
+    if (prog.bateu) {
+      linhas.push(`Meta de ${rotuloDaMeta(p.meta)} batida · ${compacto(p.profit)} acumulados`);
+    } else {
+      const falta =
+        p.meta.unidade === "tc"
+          ? `${num(prog.falta)} TC`
+          : `${compacto(prog.falta)} gp`;
+      const ritmo =
+        prog.huntsRestantes === null
+          ? "sem ritmo para estimar"
+          : `~${num(prog.huntsRestantes)} ${prog.huntsRestantes === 1 ? "hunt" : "hunts"} no ritmo atual`;
+      linhas.push(`Faltam **${falta}** de ${rotuloDaMeta(p.meta)} · ${ritmo}`);
+    }
+
+    campos.push({ name: p.nome, value: listaQueCabe(linhas, 3) });
+  }
+
+  const rodape = [
+    precoTc ? `TC a ${num(precoTc)} gp` : "preço da TC não configurado",
+    faltouPreco ? "configure em /config no site" : null,
+  ].filter(Boolean);
+
+  return couberNoTotal({
+    title: autor ? `Metas de ${autor}` : "Metas",
+    color: COR,
+    fields: campos.slice(0, LIMITES.EMBED_CAMPOS),
+    footer: { text: rodape.join(" · ") },
+  });
 }
 
 /** Embed de erro. Sempre efêmero em quem chama — ver o handler. */

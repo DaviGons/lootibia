@@ -34,12 +34,18 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
-**Bot do Discord: NO AR e em uso desde 2026-09-17.** Três comandos (`/cadastro`, `/addhunt`,
-`/viewstats`) num endpoint de HTTP Interactions em `app/api/discord/route.ts`, servido pelo mesmo
-deploy da Vercel — não há processo nem host a mais. `supabase/migrations/0002_bot_discord.sql`
-aplicado e conferido (RLS ligada em toda tabela nova; `sessao_periodo` recriada com
-`personagem_id`). App `Lootibia` registrado no Discord, endpoint validado por ele, comandos
-registrados no servidor com `scripts/registrar-comandos.ts`.
+**Bot do Discord: NO AR desde 2026-09-17, alinhado às pastas em 2026-09-21.** Quatro comandos
+(`/cadastro`, `/addhunt`, `/viewstats`, `/meta`) num endpoint de HTTP Interactions em
+`app/api/discord/route.ts`, servido pelo mesmo deploy da Vercel — não há processo nem host a mais.
+
+O que mudou em 21/09: `/addhunt` ganhou **seletor de pasta dentro do modal** (antes toda hunt vinda
+do Discord caía em "Sem pasta" e só dava para arquivar abrindo o site), `/viewstats` ganhou filtro
+de pasta **sem perder o de período**, e nasceu o `/meta`. A referência de componentes do Discord
+mudou desde setembro e forçou uma migração — ver diretriz 47.
+
+`supabase/migrations/0002_bot_discord.sql` aplicado e conferido (RLS ligada em toda tabela nova;
+`sessao_periodo` recriada com `personagem_id`). App `Lootibia` registrado no Discord, endpoint
+validado por ele, comandos registrados no servidor com `scripts/registrar-comandos.ts`.
 
 Três coisas foram provadas em produção, não presumidas: o Discord **aceitou** a Interactions
 Endpoint URL (ou seja, a verificação Ed25519 responde `200` ao `PING` assinado e `401` ao lixo); o
@@ -287,6 +293,39 @@ retorna: sem `after()` (que na Vercel vira `waitUntil`), o que vem depois do def
 roda e o usuário fica olhando "pensando…" para sempre. A exceção é o **modal, que precisa ser a
 resposta inicial** — não existe adiar e abrir modal depois.
 
+**47. A referência de componentes do Discord muda — reconferir antes de desenhar interação.** Em
+2026-09-17 o desenho registrou que "modal só aceita campo de texto". Em **2026-09-21 isso já era
+falso**: String Select, Radio Group e Checkbox valem em modal, dentro de uma **Label** (type 18). Foi
+o que permitiu o seletor de pasta do `/addhunt`. A diretriz 14 vale para o Discord e vale também
+para o **nosso próprio doc**: ele envelhece.
+
+Junto veio uma depreciação que nos atingiu — *"Action Row with Text Inputs in modals are now
+deprecated"* — e ela **muda o formato do submit**:
+
+```
+Label (atual):  { type: 18, component:  { type: 4, custom_id, value  } }
+Action Row:     { type: 1,  components: [{ type: 4, custom_id, value }] }
+```
+
+Singular contra plural. Um parser que só conheça `components[]` devolve `null` para **todo** campo,
+sem erro nenhum — o comando responderia "cole o texto do Hunt Analyser" para quem acabou de colar.
+`componentesDoModal` entende os dois, porque um modal aberto antes de um deploy pode ser submetido
+depois dele.
+
+E `value` é de Text Input; String Select devolve `values`, um array, mesmo com escolha única. Daí
+`campoDoModal` e `selecaoDoModal` serem funções separadas, com teste cruzado provando que cada uma
+devolve `null` para o tipo da outra.
+
+**48. Modal não adia, então o que ele precisa do banco corre contra um relógio.** `/addhunt` responde
+modal, e modal **tem de ser a resposta inicial** (diretriz 35). Montar o seletor exige buscar as
+pastas. Medido em 21/09: cold start até 1,49 s + primeira ida ao Supabase até 0,85 s = **2,34 s dos
+3 s**, e a medição saiu de fora da região da função.
+
+Por isso `dentroDoOrcamento()`: a busca corre contra 1,2 s e o que perder é descartado, não esperado.
+Estourado o prazo, o modal abre **sem** o seletor e a hunt cai em "Sem pasta" — o comportamento de
+antes. Degradar é ruim; "a aplicação não respondeu" é pior. Qualquer campo novo que dependa do banco
+entra por esse mesmo funil.
+
 **36. A assinatura Ed25519 é verificada sobre o corpo CRU.** Ler com `req.text()` e só então
 `JSON.parse`. Reserializar o objeto muda o texto e invalida a assinatura. Devolver `401` para
 assinatura inválida não é zelo: o Discord manda requisições quebradas de propósito e recusa
@@ -419,10 +458,15 @@ diretriz 34) e exercita a RLS pelo mesmo caminho da tela:
 
 ```bash
 node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+node --experimental-strip-types --env-file=.env.local scripts/testar-bot-pastas.ts
 ```
 
-Duas regras: ele **relê do banco** em vez de confiar no retorno da chamada — era exatamente o
-retorno que mentia —, e **não entra na diretriz 3**, porque precisa de credencial e de rede, e a
+O segundo cobre o **bot**, que chega no mesmo banco por outro caminho: a tela grava `pasta_id` num
+`update` disparado por clique, o bot grava no `insert` da importação. Política faltando num dos dois
+não aparece no outro.
+
+Duas regras: eles **releem do banco** em vez de confiar no retorno da chamada — era exatamente o
+retorno que mentia —, e **não entram na diretriz 3**, porque precisam de credencial e de rede, e a
 lista de validação tem de rodar em qualquer máquina.
 
 Se precisar saber se a culpa é da RLS, repita a operação com a chave secreta, que a ignora: se

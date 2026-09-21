@@ -18,12 +18,25 @@ import { janelaDe, lerRotulo, descreverJanela, ROTULOS } from "./discord/janela.
 import {
   listaQueCabe,
   embedDeResumo,
+  embedDeMetas,
+  barra,
   tamanhoDoEmbed,
   horas,
   compacto,
 } from "./discord/embed.ts";
-import { LIMITES, campoDoModal, opcaoTexto, opcaoBooleana, autorDaInteracao, modal } from "./discord/protocolo.ts";
-import { COMANDOS, CAMPOS_ADDHUNT, CAMPOS_CADASTRO, MODAL } from "./discord/comandos.ts";
+import {
+  LIMITES,
+  campoDoModal,
+  selecaoDoModal,
+  opcaoTexto,
+  opcaoBooleana,
+  opcaoFocada,
+  autorDaInteracao,
+  autocompletar,
+  modal,
+  TipoDeComponente,
+} from "./discord/protocolo.ts";
+import { COMANDOS, camposAddhunt, CAMPOS_CADASTRO, MODAL, CAMPO, OPCAO_PASTA } from "./discord/comandos.ts";
 import { assinarJwt, jwtConfere } from "./supabase/bot.ts";
 import { instanteDoRelogioLocal, fusoValido } from "./importacao.ts";
 import { resumirHunts, type SessaoRotulada } from "./huntAgregado.ts";
@@ -331,27 +344,57 @@ ok("opcao so com espacos vira null", opcaoTexto(comOpcoes, "personagem"), null);
 ok("opcao booleana", opcaoBooleana(comOpcoes, "publico", false), true);
 ok("booleana ausente cai no padrao", opcaoBooleana(comOpcoes, "outra", false), false);
 
+// Formato ATUAL: cada campo volta dentro de uma Label, em `component` —
+// SINGULAR. Um parser que so conhecesse `components[]` devolveria null para
+// tudo, sem erro nenhum: o comando responderia "cole o texto do Hunt Analyser"
+// para quem acabou de colar. Foi o risco real da migracao de 2026-09-21.
 const submit = {
   data: {
     custom_id: MODAL.ADDHUNT,
     components: [
+      { type: 18, component: { type: 4, custom_id: "personagem", value: " Bubble " } },
+      { type: 18, component: { type: 4, custom_id: "spot", value: "" } },
+      { type: 18, component: { type: 3, custom_id: "pasta", values: ["7"] } },
+      { type: 18, component: { type: 4, custom_id: "analyzer", value: "Session data: ..." } },
+    ],
+  },
+} as Interacao;
+ok("campo de Label vem limpo", campoDoModal(submit, "personagem"), "Bubble");
+// Campo opcional em branco chega como string vazia, não some da lista.
+ok("campo em branco vira null", campoDoModal(submit, "spot"), null);
+ok("campo inexistente vira null", campoDoModal(submit, "nada"), null);
+ok("selecao devolve o valor escolhido", selecaoDoModal(submit, "pasta"), "7");
+// String Select devolve `values` (array), Text Input devolve `value`. Ler com a
+// funcao errada da null em silencio — o bug mais provavel deste arquivo.
+ok("campoDoModal nao le um select", campoDoModal(submit, "pasta"), null);
+ok("selecaoDoModal nao le um texto", selecaoDoModal(submit, "personagem"), null);
+
+// Nada escolhido no seletor: `values` vazio, que e o caso "Sem pasta".
+const semEscolha = {
+  data: { components: [{ type: 18, component: { type: 3, custom_id: "pasta", values: [] } }] },
+} as unknown as Interacao;
+ok("seletor sem escolha vira null", selecaoDoModal(semEscolha, "pasta"), null);
+
+// Formato LEGADO: um modal aberto antes de um deploy pode ser submetido depois
+// dele. A janela e de minutos, mas existe.
+const submitLegado = {
+  data: {
+    custom_id: MODAL.ADDHUNT,
+    components: [
       { type: 1, components: [{ type: 4, custom_id: "personagem", value: " Bubble " }] },
-      { type: 1, components: [{ type: 4, custom_id: "spot", value: "" }] },
       { type: 1, components: [{ type: 4, custom_id: "analyzer", value: "Session data: ..." }] },
     ],
   },
 } as Interacao;
-ok("campo de modal vem limpo", campoDoModal(submit, "personagem"), "Bubble");
-// Campo opcional em branco chega como string vazia, não some da lista.
-ok("campo em branco vira null", campoDoModal(submit, "spot"), null);
-ok("campo inexistente vira null", campoDoModal(submit, "nada"), null);
+ok("action row antiga continua sendo lida", campoDoModal(submitLegado, "personagem"), "Bubble");
+ok("analyzer da action row antiga", campoDoModal(submitLegado, "analyzer"), "Session data: ...");
 
 // ===========================================================================
 console.log("\n== definicao dos comandos");
 // ===========================================================================
 // Erros aqui só aparecem como 400 na hora de registrar, e o registro é manual.
 
-ok("tres comandos", COMANDOS.map((c) => c.name), ["cadastro", "addhunt", "viewstats"]);
+ok("quatro comandos", COMANDOS.map((c) => c.name), ["cadastro", "addhunt", "viewstats", "meta"]);
 ok("descricao dentro de 100 caracteres", COMANDOS.every((c) => c.description.length <= 100), true);
 ok("nome so com minusculas e hifen", COMANDOS.every((c) => /^[a-z-]{1,32}$/.test(c.name)), true);
 ok(
@@ -365,19 +408,188 @@ ok(
   ROTULOS,
 );
 
+ok(
+  "a opcao de pasta usa autocomplete, nao choices",
+  COMANDOS.filter((c) => (c.options ?? []).some((o) => o.name === OPCAO_PASTA)).map((c) => c.name),
+  ["viewstats", "meta"],
+);
+// `choices` e fixo no registro; pasta e por usuario e muda quando ele quiser.
+ok(
+  "pasta nao tem choices fixas",
+  COMANDOS.every((c) =>
+    (c.options ?? []).every((o) => o.name !== OPCAO_PASTA || (o.autocomplete === true && !o.choices)),
+  ),
+  true,
+);
+
 // O analyzer precisa do campo de parágrafo: a maior sessão real medida tem
 // ~1.460 caracteres, e campo curto para em 100.
-const analyzer = CAMPOS_ADDHUNT.find((c) => c.id === "analyzer")!;
+const semPastas = camposAddhunt([]);
+const analyzer = semPastas.find((c) => c.id === "analyzer")!;
 ok("analyzer e paragrafo", analyzer.estilo, 2);
 ok("analyzer usa os 4000 do limite", analyzer.tamanhoMaximo, LIMITES.MODAL_PARAGRAFO);
 ok("analyzer e obrigatorio", analyzer.obrigatorio, true);
-ok("personagem e spot sao opcionais", CAMPOS_ADDHUNT.filter((c) => c.obrigatorio).length, 1);
-ok("modal cabe em 5 campos", CAMPOS_ADDHUNT.length <= 5 && CAMPOS_CADASTRO.length <= 5, true);
+ok("so o analyzer e obrigatorio", semPastas.filter((c) => c.obrigatorio).length, 1);
+ok("sem pastas, sem seletor", semPastas.some((c) => c.id === CAMPO.PASTA), false);
+ok("o analyzer e sempre o ultimo campo", semPastas[semPastas.length - 1].id, "analyzer");
 
-const montado = modal(MODAL.ADDHUNT, "Importar sessão", CAMPOS_ADDHUNT);
+// ===========================================================================
+console.log("\n== modal com seletor de pasta");
+// ===========================================================================
+// O seletor so e possivel desde que o Discord passou a aceitar String Select em
+// modal, dentro de uma Label (conferido em 2026-09-21).
+
+const tresPastas = [
+  { id: 7, nome: "Roshamuul" },
+  { id: 8, nome: "Asura Palace" },
+  { id: 9, nome: "Gnomprona" },
+];
+const comPastas = camposAddhunt(tresPastas);
+ok("com pastas, ganha o seletor", comPastas.some((c) => c.id === CAMPO.PASTA), true);
+ok("o analyzer continua por ultimo", comPastas[comPastas.length - 1].id, "analyzer");
+ok("a pasta continua opcional", comPastas.find((c) => c.id === CAMPO.PASTA)?.obrigatorio, false);
+ok("modal cabe em 5 componentes", comPastas.length <= LIMITES.MODAL_COMPONENTES, true);
+ok("cadastro tambem cabe", CAMPOS_CADASTRO.length <= LIMITES.MODAL_COMPONENTES, true);
+
+// 25 e o teto do String Select; 30 pastas nao podem virar payload invalido.
+const muitas = Array.from({ length: 30 }, (_, n) => ({ id: n + 1, nome: `pasta ${n}` }));
+const modalCheio = modal(MODAL.ADDHUNT, "Importar sessão", camposAddhunt(muitas));
+const seletorCheio = modalCheio.data.components.find(
+  (l) => l.component.type === TipoDeComponente.STRING_SELECT,
+)!;
+ok(
+  "o seletor corta em 25 opcoes",
+  (seletorCheio.component as { options: unknown[] }).options.length,
+  LIMITES.SELECT_OPCOES,
+);
+
+const montado = modal(MODAL.ADDHUNT, "Importar sessão", comPastas);
 ok("modal e o tipo 9", montado.type, 9);
-ok("cada campo vai na sua action row", montado.data.components.every((l) => l.components.length === 1), true);
 ok("titulo do modal cabe em 45", montado.data.title.length <= LIMITES.MODAL_TITULO, true);
+// Action Row com Text Input esta DEPRECIADA, e select em modal so funciona
+// dentro de Label. Um modal montado com type 1 volta a ser aceito pelo Discord,
+// mas fecha a porta do seletor — por isso o teste crava o 18.
+ok(
+  "todo campo vai numa Label, nao em Action Row",
+  montado.data.components.every((l) => l.type === TipoDeComponente.LABEL),
+  true,
+);
+ok(
+  "cada Label embrulha um componente so",
+  montado.data.components.every((l) => l.component && typeof l.component.type === "number"),
+  true,
+);
+ok(
+  "o rotulo vive na Label, nao no campo",
+  montado.data.components.every((l) => typeof l.label === "string" && l.label.length > 0),
+  true,
+);
+ok(
+  "o seletor e String Select",
+  montado.data.components.find((l) => l.label === "Pasta")?.component.type,
+  TipoDeComponente.STRING_SELECT,
+);
+// `min_values: 0` e o que permite NAO escolher pasta. Sem isso o Discord
+// obrigaria a escolher uma, e "Sem pasta" deixaria de existir.
+ok(
+  "seletor opcional aceita nenhuma escolha",
+  (montado.data.components.find((l) => l.label === "Pasta")?.component as { min_values?: number })
+    ?.min_values,
+  0,
+);
+
+// ===========================================================================
+console.log("\n== autocomplete");
+// ===========================================================================
+
+ok("autocomplete e o tipo 8", autocompletar([{ nome: "a", valor: "1" }]).type, 8);
+ok("corta em 25 sugestoes", autocompletar(muitas.map((p) => ({ nome: p.nome, valor: String(p.id) }))).data.choices.length, 25);
+ok("lista vazia e resposta valida", autocompletar([]).data.choices, []);
+
+// O Discord manda TODAS as opcoes e marca uma com `focused`. Sem olhar a marca,
+// um comando com dois campos autocompletaveis sugeriria a coisa errada.
+const digitando = {
+  data: {
+    name: "viewstats",
+    options: [
+      { name: "personagem", type: 3, value: "Bub" },
+      { name: "pasta", type: 3, value: "Rosha", focused: true },
+    ],
+  },
+} as Interacao;
+ok("acha a opcao focada", opcaoFocada(digitando), { nome: "pasta", texto: "Rosha" });
+ok("sem foco devolve null", opcaoFocada({ data: { options: [] } } as unknown as Interacao), null);
+
+// ===========================================================================
+console.log("\n== embed do /meta");
+// ===========================================================================
+// A meta guarda VALOR + UNIDADE. 500 TC continuam 500 TC quando o preço muda —
+// o alvo em gold é recalculado, nunca congelado.
+
+ok("barra vazia", barra(0, 10), "░░░░░░░░░░");
+ok("barra cheia", barra(1, 10), "██████████");
+ok("barra pela metade", barra(0.5, 10), "█████░░░░░");
+// Profit negativo não pode fazer a barra andar para trás.
+ok("barra nao anda para tras", barra(-0.4, 10), "░░░░░░░░░░");
+ok("barra nao passa do fim", barra(2.5, 10), "██████████");
+
+const META_TC = { valor: 500, unidade: "tc" as const };
+const PRECO = 6000; // gp por TC ⇒ alvo de 3.000.000
+
+ok("sem pasta com meta, o embed ensina o caminho", embedDeMetas([], PRECO, "Davi").fields, undefined);
+
+const metade = embedDeMetas(
+  [{ nome: "Roshamuul", meta: META_TC, profit: 1_500_000, hunts: 3 }],
+  PRECO,
+  "Davi",
+);
+ok("uma pasta, um campo", metade.fields?.length, 1);
+ok("o campo leva o nome da pasta", metade.fields?.[0].name, "Roshamuul");
+ok("mostra a porcentagem", metade.fields?.[0].value.includes("50%"), true);
+// Meta em TC devolve o que falta EM TC: quem pediu 500 TC quer ler "faltam
+// 250 TC", não "faltam 1.500.000 gp".
+ok("o que falta sai na unidade da meta", metade.fields?.[0].value.includes("250 TC"), true);
+ok("estima as hunts restantes", metade.fields?.[0].value.includes("3 hunts"), true);
+ok("o rodape mostra o preco usado", metade.footer?.text.includes("6.000 gp"), true);
+
+const batida = embedDeMetas(
+  [{ nome: "Asura", meta: META_TC, profit: 4_000_000, hunts: 10 }],
+  PRECO,
+  "Davi",
+);
+ok("meta batida e dita sem ambiguidade", batida.fields?.[0].value.includes("batida"), true);
+ok("meta batida passa de 100%", batida.fields?.[0].value.includes("133%"), true);
+
+// Sem preço configurado, meta em TC não tem alvo em gold. Dizer isso é melhor
+// que inventar cotação — nenhuma API publica preço de mercado (diretriz 24).
+const semPreco = embedDeMetas(
+  [{ nome: "Roshamuul", meta: META_TC, profit: 1_000_000, hunts: 2 }],
+  null,
+  "Davi",
+);
+ok("sem preco, avisa em vez de chutar", semPreco.fields?.[0].value.includes("sem preço da TC"), true);
+ok("e nao inventa porcentagem", semPreco.fields?.[0].value.includes("%"), false);
+
+// Meta em gp não depende de preço nenhum.
+const emGp = embedDeMetas(
+  [{ nome: "Gnomprona", meta: { valor: 2_000_000, unidade: "gp" as const }, profit: 500_000, hunts: 0 }],
+  null,
+  "Davi",
+);
+ok("meta em gp funciona sem preco", emGp.fields?.[0].value.includes("25%"), true);
+// Zero hunts: não há média, e um número ali seria mentira.
+ok("sem hunts, nao estima ritmo", emGp.fields?.[0].value.includes("sem ritmo"), true);
+
+// Muitas pastas não podem estourar os 6.000 do embed inteiro.
+const muitasMetas = Array.from({ length: 30 }, (_, n) => ({
+  nome: `pasta de nome consideravelmente longo numero ${n}`,
+  meta: META_TC,
+  profit: 1_000_000,
+  hunts: 4,
+}));
+const metaGrande = embedDeMetas(muitasMetas, PRECO, "Davi");
+ok("embed de metas cabe em 6000", tamanhoDoEmbed(metaGrande) <= LIMITES.EMBED_TOTAL, true);
+ok("e em 25 campos", (metaGrande.fields ?? []).length <= LIMITES.EMBED_CAMPOS, true);
 
 // ===========================================================================
 console.log("\n== JWT do bot");
