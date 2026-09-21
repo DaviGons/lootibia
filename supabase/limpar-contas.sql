@@ -38,14 +38,15 @@ commit;
 -- ---------------------------------------------------------------------------
 -- E no painel do Supabase (Authentication > Sign In / Providers), duas chaves:
 --
---   1. DESLIGAR "Allow new users to sign up".
---      O site não tem mais tela de cadastro, mas o endpoint do GoTrue continua
---      aceitando `POST /signup` de quem souber o caminho. Sem desligar aqui,
---      remover a tela é decoração: qualquer um cria a própria conta via API.
+--   1. "Allow new users to sign up" tem de ficar DESLIGADO.
+--      Medido em 2026-09-19: `POST /auth/v1/signup` responde `422
+--      signup_disabled`, ou seja, ja esta. Nao e tarefa — e o que conferir se um
+--      dia aparecer conta que ninguem criou. Remover a tela de cadastro sozinha
+--      seria decoracao: o endpoint do GoTrue atende quem souber o caminho.
 --
---   2. DESLIGAR "Confirm email".
---      O domínio `@lootibia.invalid` não existe por definição (RFC 6761), então
---      nenhuma confirmação chega. `criar-usuario.ts` já cria com
---      `email_confirm: true`, mas com a opção ligada qualquer outro caminho que
---      crie conta a deixaria pendurada sem poder entrar.
+--   2. "Confirm email" pode ficar como esta.
+--      `criar-usuario.ts` cria com `email_confirm: true`, entao a conta ja nasce
+--      confirmada e nenhuma mensagem e enviada para o dominio `.invalid` — que,
+--      pela RFC 6761, nao existe. So importaria se houvesse outro caminho
+--      criando conta, e com o cadastro desligado nao ha.
 -- ---------------------------------------------------------------------------
