@@ -12,6 +12,7 @@ import { spriteDe } from "@/lib/sprites";
 import { usuarioDoEmail } from "@/lib/conta";
 import { Marca } from "@/components/marca";
 import { Lateral, type PastaNaLateral } from "@/components/lateral";
+import { Analyzer } from "@/components/analyzer";
 import { FaixaDoDia } from "@/components/faixa-do-dia";
 import { MoverSessao } from "@/components/mover-sessao";
 
@@ -511,13 +512,16 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
                             >
                               {num(balance)}
                             </td>
-                            <td className="px-4 py-2.5 text-right">
-                              <form action={apagarSessao}>
-                                <input type="hidden" name="id" value={l.id} />
-                                <button className="text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100">
-                                  apagar
-                                </button>
-                              </form>
+                            <td className="px-4 py-2.5">
+                              <span className="flex items-center justify-end gap-1">
+                                <Analyzer sessaoId={l.id} spot={l.spot?.nome ?? null} />
+                                <form action={apagarSessao}>
+                                  <input type="hidden" name="id" value={l.id} />
+                                  <button className="rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100">
+                                    apagar
+                                  </button>
+                                </form>
+                              </span>
                             </td>
                           </tr>
                         );
