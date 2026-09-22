@@ -46,9 +46,11 @@ Quatro peças nasceram naquele contexto e hoje sustentam o site — **não apagu
 `lib/supabase/jwt.ts` (de que `scripts/testar-pastas.ts` depende para exercitar a RLS de verdade),
 a tabela `personagem` e a coluna `perfil.fuso`.
 
-Em aberto: o de-para de plural dos **itens** (`great mana potions` → `Great Mana Potion`) não
-existe, e sem ele não dá para cruzar loot com `npcvalue` do wiki. O analyzer tornou isso mais
-visível — ele lista os itens lootados, e não tem como dizer quanto valem (diretriz 24).
+O de-para de nome de **item** para título do wiki existe desde 2026-09-22 em
+[lib/nomesDeItem.ts](lib/nomesDeItem.ts) — e a premissa antiga, de que faltava resolver plural,
+**era falsa** (diretriz 52). Em aberto continua o passo seguinte: ninguém consome o `npcvalue`
+ainda, e a decisão de como mostrá-lo esbarra na diretriz 24 — ele é referência de NPC, não preço
+de mercado.
 
 **Login por usuário e senha desde 2026-09-19.** Não existe
 cadastro: o Davi cria as contas com `scripts/criar-usuario.ts`, que sorteia um código de ativação.
@@ -119,6 +121,7 @@ node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
 node --experimental-strip-types lib/metaRashid.test.ts
 node --experimental-strip-types lib/moedas.test.ts
+node --experimental-strip-types lib/nomesDeItem.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -171,6 +174,29 @@ registrar o número. Tupla morta conta para o tamanho — considerar `VACUUM` ap
 **14. Nunca inferir o formato de uma resposta.** Consultar `docs/tibia-apis.md` ou fazer a chamada
 real. As duas APIs divergem do que a documentação delas promete, e a TibiaWikiApi não tem contrato
 estável — ela espelha templates de wiki que mudam sem aviso.
+
+**52. A NOSSA documentação também envelhece — e o fixture ganha dela.** A diretriz 14 manda não
+inferir o formato de resposta de terceiro. Esta diz o mesmo sobre o que nós mesmos escrevemos.
+
+Aconteceu em 2026-09-22. `docs/hunt-analyser.md` e o `AGENTS.md` afirmavam, havia dias, que o Hunt
+Analyser escreve item no plural (`great mana potions`) e que faltava um de-para para resolver isso.
+**O fixture do próprio repositório desmentia**: `413x a great mana potion` — singular, com artigo,
+na quantidade 413. E 136 itens de 7 sessões reais não tinham **nenhum** par singular/plural.
+
+O problema real era outro: a API do wiki é sensível a caixa e não usa Title Case inglês
+(`Wand of Inferno` responde 200, `Wand Of Inferno` responde 404).
+
+O que isso custaria se eu tivesse confiado no texto: singularizar antes de consultar transformaria
+`steel boots` em `steel boot`, `terra legs` em `terra leg` e `silencer claws` em `silencer claw` —
+**nove itens do banco cujo nome É plural**, todos passando a dar 404. O conserto "óbvio" quebraria
+o que estava certo, para resolver um problema que não existia.
+
+Duas regras, então:
+
+- Antes de consertar um problema que a documentação descreve, **confirme que ele existe** — no
+  fixture, no banco, ou na API.
+- Quando a prosa e o dado gravado discordam, o dado gravado vence, e a prosa se corrige no mesmo
+  commit. Documentação errada é pior que documentação ausente: a ausente faz você ir olhar.
 
 **15. Todo acesso passa por uma camada de cliente única, por API.** Nenhum `fetch` solto espalhado
 pelo código. Cada cliente concentra URL base, `User-Agent` identificável, timeout, retry, cache e
