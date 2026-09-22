@@ -11,20 +11,22 @@ const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 
  * coisa que ele mostra pode ser um número NEGATIVO. Sem explicação isso parece
  * erro de conta, e quem vê vai perguntar — que é exatamente o que não se quer.
  *
- * Três coisas resolvem isso, e todas ficam SEMPRE visíveis:
+ * Duas coisas resolvem isso, e **nenhuma delas é um texto explicativo**:
  *
  * 1. **A soma.** `caixa + itens = profit`, sempre — é álgebra, não coincidência:
- *    `(moedas − supplies) + (loot − moedas) = loot − supplies`. Dizer isso na
- *    tela transforma "dois números que se contradizem" em "duas parcelas do
+ *    `(moedas − supplies) + (loot − moedas) = loot − supplies`. Mostrar o `+` e
+ *    o `=` transforma "dois números que se contradizem" em "duas parcelas do
  *    mesmo número". `lib/moedas.test.ts` trava a invariante, inclusive com
  *    profit negativo — a tela promete a conta, então ela tem de fechar.
- * 2. **O porquê**, em UMA frase, sem jargão: só três moedas caem direto no
- *    balance do personagem. Uma frase, e não um parágrafo — a versão anterior
- *    explicava também por que a parcela ficava negativa, e isso era dizer em
- *    prosa o que a sub-nota `moeda − supplies` já mostra com os dois números
- *    lado a lado. Quando o número se explica, o texto só atrapalha.
- * 3. **Rótulos que dizem o que é**, não como se chama: "já caiu na sua conta"
- *    em vez de "líquido", "ainda precisa vender" em vez de "a realizar".
+ * 2. **Rótulos que dizem o que é**, não como se chama: "já caiu na sua conta"
+ *    em vez de "líquido", "ainda precisa vender" em vez de "a realizar". E a
+ *    sub-nota `moeda − supplies` mostra a conta com os dois números lado a lado,
+ *    que é por onde se vê sozinho por que a parcela ficou negativa.
+ *
+ * Houve aqui um rodapé explicando o conceito em prosa. Saiu em 2026-09-22, por
+ * decisão do Davi, e **não é para voltar**: os números com os rótulos certos já
+ * dizem o que precisa ser dito. Quando o número se explica, o texto só ocupa
+ * espaço.
  *
  * ## Duas escalas, um componente
  *
@@ -86,16 +88,6 @@ export function Caixa({ s, titulo }: { s: LootSeparado; titulo: string }) {
         <Parcela rotulo="Profit" valor={s.profit} destaque />
       </div>
 
-      {/* Uma linha, e é o cálculo. `max-w-prose` porque num monitor largo um
-          parágrafo solto atravessa 1.600 px e deixa de ser lido.
-          Não há frase para o caixa negativo: a sub-nota da parcela já mostra
-          `moeda − supplies` com o segundo maior que o primeiro. Explicar em
-          prosa o que os números dizem sozinhos é ruído. */}
-      <p className="mt-4 max-w-prose border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Moeda — <b className="text-foreground">gold</b>, <b className="text-foreground">platinum</b>{" "}
-        e <b className="text-foreground">crystal coin</b> — cai direto no balance. Menos os
-        supplies, dá o que já está na conta; o resto do loot é item.
-      </p>
     </section>
   );
 }
