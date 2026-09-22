@@ -181,7 +181,7 @@ inferir o formato de resposta de terceiro. Esta diz o mesmo sobre o que nós mes
 Aconteceu em 2026-09-22. `docs/hunt-analyser.md` e o `AGENTS.md` afirmavam, havia dias, que o Hunt
 Analyser escreve item no plural (`great mana potions`) e que faltava um de-para para resolver isso.
 **O fixture do próprio repositório desmentia**: `413x a great mana potion` — singular, com artigo,
-na quantidade 413. E 136 itens de 7 sessões reais não tinham **nenhum** par singular/plural.
+na quantidade 413. E os 135 itens de 7 sessões reais não tinham **nenhum** par singular/plural.
 
 O problema real era outro: a API do wiki é sensível a caixa e não usa Title Case inglês
 (`Wand of Inferno` responde 200, `Wand Of Inferno` responde 404).

@@ -123,14 +123,13 @@ node --experimental-strip-types lib/hunt.test.ts
 
 1. ~~**Plural dos nomes.**~~ **RESOLVIDO em 2026-09-22 — e a premissa estava errada.** Este item
    afirmava que o jogo escreve `great mana potions` no plural. **Não escreve.** O fixture logo acima
-   traz `413x a great mana potion`: singular, com artigo, na quantidade 413. E 136 itens de 7
+   traz `413x a great mana potion`: singular, com artigo, na quantidade 413. E os 135 itens de 7
    sessões reais não têm **nenhum** par singular/plural.
 
    O problema real era outro: a API do wiki é **sensível a caixa**, e a convenção dela não é Title
    Case inglês. `Wand of Inferno` responde 200; `Wand Of Inferno`, **404**. Resolvido em
    [lib/nomesDeItem.ts](../lib/nomesDeItem.ts), com cobertura medida por
-   `scripts/conferir-itens.ts`: **135 de 136** itens do banco encontram página, e o único que falha
-   é um registro com nome truncado que nenhuma sessão usa.
+   `scripts/conferir-itens.ts`: **135 de 135** itens do banco encontram página, sem exceção.
 
    Criatura é outra história: ali o plural existe de verdade (a TibiaData escreve
    `Dark Torturers`), e quem resolve é `lib/nomesDeCriatura.ts`.
