@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollText } from "lucide-react";
 import { spriteDe } from "@/lib/sprites";
+import { separarLoot } from "@/lib/moedas";
+import { Caixa } from "@/components/caixa";
 import { detalheDaSessao, type DetalheDaSessao } from "@/app/hunts/detalhe";
 
 const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
@@ -111,7 +113,7 @@ export function Analyzer({ sessaoId, spot }: { sessaoId: number; spot: string | 
 }
 
 function Corpo({ d }: { d: DetalheDaSessao }) {
-  const balance = d.loot - d.supplies;
+  const s = separarLoot(d.loot, d.supplies, d.itens);
   const h = d.duracaoSegundos / 3600;
   // `Σ total / Σ horas`, com uma sessão só — a mesma regra do resumo, e não a
   // taxa que o texto do jogo traz (que não se persiste, ver AGENTS.md).
@@ -120,7 +122,7 @@ function Corpo({ d }: { d: DetalheDaSessao }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
-        <Numero rotulo="Profit" valor={balance} porHora={porHora(balance)} destaque />
+        <Numero rotulo="Profit" valor={s.profit} porHora={porHora(s.profit)} destaque />
         <Numero rotulo="Loot" valor={d.loot} porHora={porHora(d.loot)} />
         <Numero rotulo="Supplies" valor={d.supplies} porHora={porHora(d.supplies)} />
         <Numero rotulo="XP" valor={d.xp} porHora={porHora(d.xp)} />
@@ -129,6 +131,8 @@ function Corpo({ d }: { d: DetalheDaSessao }) {
         <Numero rotulo="Cura" valor={d.healing} porHora={porHora(d.healing)} />
         <Numero rotulo="Duração" texto={horas(d.duracaoSegundos)} />
       </div>
+
+      <Caixa s={s} titulo="Do loot desta hunt, quanto já é dinheiro" />
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Lista

@@ -5,6 +5,8 @@ import { resumirHunts, type SessaoRotulada } from "@/lib/huntAgregado";
 import { semanaTibia, diaTibia } from "@/lib/periodo";
 import { rashidEm } from "@/lib/rashid";
 import { progressoDaMeta, rotuloDaMeta, type UnidadeDaMeta } from "@/lib/meta";
+import { separarLoot, NOMES_DE_MOEDA } from "@/lib/moedas";
+import { Caixa } from "@/components/caixa";
 import { FormularioImportacao } from "./formulario";
 import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
@@ -261,13 +263,34 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
   const pastaAtual = pastas.find((p) => p.id === pastaAberta) ?? null;
   const titulo = pastaAtual?.nome ?? (selecionada === "sem" ? "Sem pasta" : "Todas as hunts");
 
-  const { data: dadosDetalhe } = await supabase
-    .from("sessao_monstro")
-    .select("sessao_id, quantidade, monstro(nome)")
-    .in("sessao_id", linhas.length > 0 ? linhas.slice(0, 200).map((l) => l.id) : [-1]);
+  const idsEmEscopo = linhas.length > 0 ? linhas.slice(0, 200).map((l) => l.id) : [-1];
+
+  // Duas consultas estreitas, em paralelo. A das moedas puxa NO MÁXIMO três
+  // linhas por sessão (são três moedas no Tibia inteiro), e não o detalhe
+  // completo, que na sessão medida eram 38 itens — diretriz 50.
+  const [{ data: dadosDetalhe }, { data: dadosMoedas }] = await Promise.all([
+    supabase
+      .from("sessao_monstro")
+      .select("sessao_id, quantidade, monstro(nome)")
+      .in("sessao_id", idsEmEscopo),
+    supabase
+      .from("sessao_item")
+      .select("sessao_id, quantidade, item!inner(nome)")
+      .in("sessao_id", idsEmEscopo)
+      .in("item.nome", NOMES_DE_MOEDA),
+  ]);
   const detalhes = (dadosDetalhe ?? []) as unknown as LinhaDetalhe[];
+  const moedas = (dadosMoedas ?? []) as unknown as { quantidade: number; item: { nome: string } }[];
 
   const resumo = resumirHunts(linhas.map((l) => paraAgregado(l, detalhes)));
+
+  // A separação do acumulado usa a MESMA função da sessão única, com os totais
+  // do período: as moedas de todas as sessões em escopo contra o loot somado.
+  const separado = separarLoot(
+    resumo.loot,
+    resumo.supplies,
+    moedas.map((m) => ({ nome: m.item.nome, quantidade: m.quantidade })),
+  );
   const maiorContagem = resumo.monstrosMortos[0]?.quantidade ?? 1;
 
   const meta =
@@ -332,6 +355,11 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
                   {resumo.porHora ? ` · ${num(resumo.porHora.profit)}/h` : ""}
                 </p>
               </section>
+
+              <Caixa
+                s={separado}
+                titulo={pastaAtual ? "Do loot da pasta, quanto já é dinheiro" : "Do loot acumulado, quanto já é dinheiro"}
+              />
 
               {meta && <Meta meta={meta} progresso={progresso} precoTc={precoTc} />}
 

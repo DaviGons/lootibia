@@ -118,6 +118,7 @@ node --experimental-strip-types lib/sprites.test.ts
 node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
 node --experimental-strip-types lib/metaRashid.test.ts
+node --experimental-strip-types lib/moedas.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
