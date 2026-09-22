@@ -18,8 +18,11 @@ const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 
  *    tela transforma "dois números que se contradizem" em "duas parcelas do
  *    mesmo número". `lib/moedas.test.ts` trava a invariante, inclusive com
  *    profit negativo — a tela promete a conta, então ela tem de fechar.
- * 2. **O porquê**, em uma frase, sem jargão: só três moedas caem direto no
- *    balance do personagem.
+ * 2. **O porquê**, em UMA frase, sem jargão: só três moedas caem direto no
+ *    balance do personagem. Uma frase, e não um parágrafo — a versão anterior
+ *    explicava também por que a parcela ficava negativa, e isso era dizer em
+ *    prosa o que a sub-nota `moeda − supplies` já mostra com os dois números
+ *    lado a lado. Quando o número se explica, o texto só atrapalha.
  * 3. **Rótulos que dizem o que é**, não como se chama: "já caiu na sua conta"
  *    em vez de "líquido", "ainda precisa vender" em vez de "a realizar".
  *
@@ -77,24 +80,21 @@ export function Caixa({ s, titulo }: { s: LootSeparado; titulo: string }) {
         <Parcela
           rotulo="Ainda precisa vender"
           valor={s.itens}
-          nota="quanto o jogo acha que vale, por referência de NPC — não preço de mercado"
+          nota="avaliação do jogo, não preço de mercado"
         />
         <Operador sinal="=" />
         <Parcela rotulo="Profit" valor={s.profit} destaque />
       </div>
 
-      <p className="mt-4 border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
-        <b className="text-foreground">Por que separar:</b> no Tibia, só{" "}
-        <b className="text-foreground">gold coin</b>, <b className="text-foreground">platinum coin</b>{" "}
-        e <b className="text-foreground">crystal coin</b> caem direto no balance do personagem. Todo
-        o resto do loot é item, e item só vira dinheiro quando você vende.
-        {s.consistente && s.caixa < 0 && (
-          <>
-            {" "}
-            Aqui os supplies custaram mais do que caiu de moeda — por isso a primeira parcela está
-            negativa. O profit continua certo: ele só depende de você vender o loot.
-          </>
-        )}
+      {/* Uma linha, e é o cálculo. `max-w-prose` porque num monitor largo um
+          parágrafo solto atravessa 1.600 px e deixa de ser lido.
+          Não há frase para o caixa negativo: a sub-nota da parcela já mostra
+          `moeda − supplies` com o segundo maior que o primeiro. Explicar em
+          prosa o que os números dizem sozinhos é ruído. */}
+      <p className="mt-4 max-w-prose border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
+        Moeda — <b className="text-foreground">gold</b>, <b className="text-foreground">platinum</b>{" "}
+        e <b className="text-foreground">crystal coin</b> — cai direto no balance. Menos os
+        supplies, dá o que já está na conta; o resto do loot é item.
       </p>
     </section>
   );
