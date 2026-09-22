@@ -1,12 +1,24 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 import { importarSessao, type ResultadoImportacao } from "./acoes";
 
 const CAMPO =
   "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20";
 
-export function FormularioImportacao() {
+// Seta nativa, como no seletor de pasta de `components/mover-sessao.tsx`:
+// desenhar a própria exigiria `appearance-none` e um ícone de fundo, e a nativa
+// já vem certa no claro e no escuro. `h-[38px]` casa a altura com a do <input>
+// ao lado — sem isso os dois campos da mesma linha ficam desalinhados.
+const SELETOR = `${CAMPO} h-[38px] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60`;
+
+export interface CharDoSeletor {
+  id: number;
+  nome: string;
+}
+
+export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
   const [estado, acao, enviando] = useActionState<ResultadoImportacao | null, FormData>(
     importarSessao,
     null,
@@ -26,9 +38,28 @@ export function FormularioImportacao() {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium">Personagem</span>
-          <input name="personagem" placeholder="Bubble" className={CAMPO} />
+          <select name="personagem_id" disabled={chars.length === 0} className={SELETOR}>
+            <option value="">{chars.length === 0 ? "Nenhum cadastrado" : "Sem personagem"}</option>
+            {chars.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nome}
+              </option>
+            ))}
+          </select>
           <span className="text-xs text-muted-foreground">
-            Opcional. Serve para separar os números por char.
+            Opcional. Serve para separar os números por char.{" "}
+            {chars.length === 0 ? (
+              <>
+                <Link href="/config" className="text-primary underline underline-offset-4">
+                  Cadastre um
+                </Link>{" "}
+                para usar este campo.
+              </>
+            ) : (
+              <Link href="/config" className="text-primary underline underline-offset-4">
+                Gerenciar
+              </Link>
+            )}
           </span>
         </label>
 

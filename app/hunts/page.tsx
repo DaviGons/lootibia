@@ -12,6 +12,7 @@ import { spriteDe } from "@/lib/sprites";
 import { usuarioDoEmail } from "@/lib/conta";
 import { Marca } from "@/components/marca";
 import { Lateral, type PastaNaLateral } from "@/components/lateral";
+import { Analyzer } from "@/components/analyzer";
 import { FaixaDoDia } from "@/components/faixa-do-dia";
 import { MoverSessao } from "@/components/mover-sessao";
 
@@ -190,7 +191,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
         .limit(500),
       supabase.from("pasta").select("id, nome, meta_valor, meta_unidade").order("ordem").order("id"),
       supabase.from("config_mundo").select("mundo, preco_tc"),
-      supabase.from("usuario_personagem").select("personagem(nome, mundo)"),
+      supabase.from("usuario_personagem").select("personagem(id, nome, mundo)"),
     ]);
 
   if (error) {
@@ -209,8 +210,18 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
 
   const todas = (dadosSessoes ?? []) as unknown as LinhaSessao[];
   const pastas = (dadosPastas ?? []) as LinhaPasta[];
-  const chars = (dadosChars ?? []) as unknown as { personagem: { nome: string; mundo: string | null } | null }[];
+  const chars = (dadosChars ?? []) as unknown as {
+    personagem: { id: number; nome: string; mundo: string | null } | null;
+  }[];
   const mundo = chars.map((c) => c.personagem?.mundo).find(Boolean) ?? null;
+
+  // O formulário só oferece char cadastrado, e por isso precisa do id junto do
+  // nome — ele envia o id, não o texto (ver `app/hunts/formulario.tsx`).
+  const charsDoSeletor = chars
+    .map((c) => c.personagem)
+    .filter((p): p is { id: number; nome: string; mundo: string | null } => p !== null)
+    .map((p) => ({ id: p.id, nome: p.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
   const precoTc =
     ((dadosConfig ?? []) as { mundo: string; preco_tc: number }[]).find((c) => c.mundo === mundo)
       ?.preco_tc ?? null;
@@ -501,13 +512,16 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
                             >
                               {num(balance)}
                             </td>
-                            <td className="px-4 py-2.5 text-right">
-                              <form action={apagarSessao}>
-                                <input type="hidden" name="id" value={l.id} />
-                                <button className="text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100">
-                                  apagar
-                                </button>
-                              </form>
+                            <td className="px-4 py-2.5">
+                              <span className="flex items-center justify-end gap-1">
+                                <Analyzer sessaoId={l.id} spot={l.spot?.nome ?? null} />
+                                <form action={apagarSessao}>
+                                  <input type="hidden" name="id" value={l.id} />
+                                  <button className="rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100">
+                                    apagar
+                                  </button>
+                                </form>
+                              </span>
                             </td>
                           </tr>
                         );
@@ -525,7 +539,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
               Cole o que o Hunt Analyser copiou. As taxas por hora do jogo são ignoradas — os
               números são recalculados a partir dos totais.
             </p>
-            <FormularioImportacao />
+            <FormularioImportacao chars={charsDoSeletor} />
           </section>
 
           <footer className="text-xs leading-relaxed text-muted-foreground">
