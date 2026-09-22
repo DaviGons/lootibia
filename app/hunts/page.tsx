@@ -190,7 +190,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
         .limit(500),
       supabase.from("pasta").select("id, nome, meta_valor, meta_unidade").order("ordem").order("id"),
       supabase.from("config_mundo").select("mundo, preco_tc"),
-      supabase.from("usuario_personagem").select("personagem(nome, mundo)"),
+      supabase.from("usuario_personagem").select("personagem(id, nome, mundo)"),
     ]);
 
   if (error) {
@@ -209,8 +209,18 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
 
   const todas = (dadosSessoes ?? []) as unknown as LinhaSessao[];
   const pastas = (dadosPastas ?? []) as LinhaPasta[];
-  const chars = (dadosChars ?? []) as unknown as { personagem: { nome: string; mundo: string | null } | null }[];
+  const chars = (dadosChars ?? []) as unknown as {
+    personagem: { id: number; nome: string; mundo: string | null } | null;
+  }[];
   const mundo = chars.map((c) => c.personagem?.mundo).find(Boolean) ?? null;
+
+  // O formulário só oferece char cadastrado, e por isso precisa do id junto do
+  // nome — ele envia o id, não o texto (ver `app/hunts/formulario.tsx`).
+  const charsDoSeletor = chars
+    .map((c) => c.personagem)
+    .filter((p): p is { id: number; nome: string; mundo: string | null } => p !== null)
+    .map((p) => ({ id: p.id, nome: p.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
   const precoTc =
     ((dadosConfig ?? []) as { mundo: string; preco_tc: number }[]).find((c) => c.mundo === mundo)
       ?.preco_tc ?? null;
@@ -525,7 +535,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
               Cole o que o Hunt Analyser copiou. As taxas por hora do jogo são ignoradas — os
               números são recalculados a partir dos totais.
             </p>
-            <FormularioImportacao />
+            <FormularioImportacao chars={charsDoSeletor} />
           </section>
 
           <footer className="text-xs leading-relaxed text-muted-foreground">

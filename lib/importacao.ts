@@ -22,8 +22,15 @@ export interface PedidoDeImportacao {
   texto: string;
   /** Rótulo do spot ('Asura Palace'). O jogo não informa — é do usuário. */
   spot?: string | null;
-  /** Nome do personagem. Também não vem do jogo. */
-  personagem?: string | null;
+  /**
+   * Id do personagem, dos que o usuário cadastrou. Também não vem do jogo.
+   *
+   * Id e não nome: nome livre passava por `idsPorNome`, que faz `upsert` — cada
+   * erro de digitação virava uma linha nova numa tabela de lookup que todo
+   * autenticado enxerga. Quem cria personagem agora é só a tela de `/config`,
+   * que confere o nome contra a TibiaData antes.
+   */
+  personagemId?: number | null;
   /**
    * Pasta onde arquivar. Nulo cai em "Sem pasta", que e o padrao.
    *
@@ -117,7 +124,7 @@ export function fusoValido(fuso: string): boolean {
  */
 export async function idsPorNome(
   supabase: SupabaseClient,
-  tabela: "monstro" | "item" | "spot" | "personagem",
+  tabela: "monstro" | "item" | "spot",
   nomes: string[],
 ): Promise<Map<string, number>> {
   if (nomes.length === 0) return new Map();
@@ -165,14 +172,16 @@ export async function importarSessao(
     const inicio = instanteDoRelogioLocal(sessao.inicio, fuso);
 
     const rotulo = pedido.spot?.trim() || null;
-    const personagem = pedido.personagem?.trim() || null;
 
     const spotId = rotulo
       ? ((await idsPorNome(supabase, "spot", [rotulo])).get(rotulo) ?? null)
       : null;
-    const personagemId = personagem
-      ? ((await idsPorNome(supabase, "personagem", [personagem])).get(personagem) ?? null)
-      : null;
+
+    // O personagem chega resolvido: quem escolhe é um seletor de chars já
+    // cadastrados, então não há nome novo para criar aqui. O spot continua
+    // passando por `idsPorNome` porque ele é digitado livre, de propósito —
+    // nome de hunt é vocabulário que cresce com o uso.
+    const personagemId = pedido.personagemId ?? null;
 
     const { data: inserida, error: erroSessao } = await supabase
       .from("sessao")

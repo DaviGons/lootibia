@@ -25,7 +25,7 @@ export async function importarSessao(
 ): Promise<ResultadoImportacao> {
   const texto = String(formData.get("texto") ?? "");
   const spot = String(formData.get("rotulo") ?? "").trim();
-  const personagem = String(formData.get("personagem") ?? "").trim();
+  const personagemId = Number(formData.get("personagem_id")) || null;
   const fuso = String(formData.get("fuso") ?? "UTC");
 
   if (!texto.trim()) return { ok: false, mensagem: "Cole o texto do Hunt Analyser." };
@@ -39,10 +39,23 @@ export async function importarSessao(
   // para quem viaja ou muda de máquina.
   await guardarFuso(supabase, auth.user.id, fuso);
 
+  // O seletor só mostra char do usuário, mas o `select` chega por `FormData` e
+  // isso é o cliente falando. A RLS de `personagem` é `using (true)` — vocabulário
+  // compartilhado, todo autenticado lê —, então ela NÃO recusaria o id de um char
+  // alheio. Quem recusa é esta consulta, que passa por `usuario_personagem`.
+  if (personagemId !== null) {
+    const { data: meu } = await supabase
+      .from("usuario_personagem")
+      .select("personagem_id")
+      .eq("personagem_id", personagemId)
+      .maybeSingle();
+    if (!meu) return { ok: false, mensagem: "Esse personagem não é seu." };
+  }
+
   const r = await gravarSessao(supabase, {
     texto,
     spot,
-    personagem,
+    personagemId,
     fuso,
     usuarioId: auth.user.id,
   });
