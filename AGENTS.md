@@ -11,6 +11,10 @@ Referências técnicas verificadas — **ler antes de escrever código que toque
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
 
+**Número de diretriz não se reaproveita.** Diretriz removida deixa buraco na sequência — é o que
+explica a ausência de 34 a 36, 47 e 48 — para que uma referência antiga, num commit ou num
+comentário, nunca aponte para uma regra diferente da que ela citava.
+
 ## Escopo
 
 **Analisador de Hunts.** O usuário cola o texto que o Hunt Analyser do Tibia copia, o app parseia,
@@ -28,10 +32,11 @@ Duas regras de cálculo que não se negociam:
 Detalhes do formato, armadilhas e dimensionamento: [docs/hunt-analyser.md](docs/hunt-analyser.md).
 Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 
-**Estado em 2026-09-17:** app no ar em <https://lootibia.vercel.app>, schema de
-`supabase/migrations/0001_schema.sql` **aplicado e verificado** no Supabase — importação, RLS
-isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
-ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
+**Estado:** app no ar em <https://lootibia.vercel.app>. Os três migrations de
+`supabase/migrations/` estão **aplicados e verificados** no Supabase — importação, RLS isolando por
+usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de ponta a
+ponta. A tela `/hunts` importa, lista, apaga, organiza em pastas e mostra os acumulados com
+sprites.
 
 **Houve uma integração externa, e ela foi removida por completo em 2026-09-22** — código, schema,
 documentação e branches. Não resta ponta solta a manter, e **não é para ressuscitá-la**.
@@ -42,7 +47,8 @@ Quatro peças nasceram naquele contexto e hoje sustentam o site — **não apagu
 a tabela `personagem` e a coluna `perfil.fuso`.
 
 Em aberto: o de-para de plural dos **itens** (`great mana potions` → `Great Mana Potion`) não
-existe, e sem ele não dá para cruzar loot com `npcvalue` do wiki.
+existe, e sem ele não dá para cruzar loot com `npcvalue` do wiki. O analyzer tornou isso mais
+visível — ele lista os itens lootados, e não tem como dizer quanto valem (diretriz 24).
 
 **Login por usuário e senha desde 2026-09-19.** Não existe
 cadastro: o Davi cria as contas com `scripts/criar-usuario.ts`, que sorteia um código de ativação.
@@ -64,8 +70,8 @@ qualquer outro domínio no login (`invalid_credentials`, e não rejeição de fo
 Falta exercitar de ponta a ponta o desvio do middleware para `/auth/definir-senha`: ele depende de
 uma sessão real, e ninguém entrou ainda com um código.
 
-**Pastas com meta, em implementação desde 2026-09-21.** A semana saiu da tela: quem organiza é a
-PASTA, criada e nomeada pelo usuário, com meta opcional em TC ou gp. Schema em
+**Pastas com meta desde 2026-09-21.** A semana saiu da tela: quem organiza é a PASTA, criada e
+nomeada pelo usuário, com meta opcional em TC ou gp. Schema em
 `supabase/migrations/0003_pastas_e_metas.sql`. `lib/periodo.ts` **continua de pé** — deixou de ser
 o eixo da interface e virou o motor que sabe a que dia de jogo um instante pertence, do qual depende
 a cidade do Rashid (diretriz 42).
@@ -73,6 +79,13 @@ a cidade do Rashid (diretriz 42).
 Novos módulos: [lib/meta.ts](lib/meta.ts) (progresso, conversão TC↔gp),
 [lib/rashid.ts](lib/rashid.ts) (rotação semanal) e [lib/tibiadata.ts](lib/tibiadata.ts) (cliente
 único da API, diretriz 15). Tela de `/config` para personagem e preço da TC.
+
+**Personagem por seletor, e analyzer por sessão, desde 2026-09-22.** O campo livre de personagem na
+importação virou `<select>` dos chars cadastrados em `/config` — o porquê, que não é só de fluxo,
+está na diretriz 49. E cada linha da lista ganhou um botão que abre o **analyzer daquela hunt**
+([components/analyzer.tsx](components/analyzer.tsx) e [app/hunts/detalhe.ts](app/hunts/detalhe.ts)):
+números, monstros e itens com quantidade, mais `damage` e `healing` — dois campos que o banco
+guardava desde a primeira importação e que nenhuma tela mostrava.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -198,6 +211,31 @@ qualquer porcentagem. `"Empty"` é kills sem loot: excluir de rankings de item.
 (`dragon`), o wiki usa título de página (`Dragon`). Manter tabela de mapeamento versionada, com
 fallback e teste para os nomes que divergem.
 
+**49. Tabela de lookup é vocabulário COMPARTILHADO, e isso tem duas consequências.**
+
+A primeira é de dados. `monstro`, `item`, `spot` e `personagem` guardam o nome uma vez e todo mundo
+referencia o id (diretriz 10). Campo de texto livre que passa por `idsPorNome` faz **`upsert`**:
+"Bubble", "bubble" e "Buble" viram três linhas, e os números do mesmo char se espalham entre chars
+diferentes — o oposto do que o campo existia para fazer. Por isso o campo de personagem virou
+seletor em 22/09, e quem cria personagem agora é só o `/config`, que confere o nome contra a
+TibiaData antes. O `spot` continua texto livre **de propósito**: nome de hunt é vocabulário que
+cresce com o uso, e não há lista de onde escolher.
+
+A segunda é de segurança, e é a que surpreende. A RLS dessas tabelas é `using (true)`, porque todo
+autenticado precisa ler o vocabulário. Logo, **um id de tabela de lookup vindo do cliente NÃO está
+protegido pela RLS** — ela não tem como recusar o id do char de outra pessoa. Quem recusa tem de ser
+uma consulta explícita à tabela de vínculo (`usuario_personagem`). Medido em 22/09 contra o banco
+real: a checagem rejeita o id alheio, e a RLS sozinha **teria deixado passar**.
+
+Vale para qualquer campo novo em que o cliente mande o id de um lookup. `<select>` no HTML não é
+validação: é o cliente falando.
+
+Nada disso é surpresa do schema — o `0001` já anotava, em comentário, o **risco aceito** de um
+autenticado poluir os lookups com nomes inventados, e adiava o endurecimento "para quando houver
+usuário além de nós". O caso do `personagem` foi fechado por outro caminho, sem `security definer`:
+tirando o texto livre, ninguém mais inventa nome. `monstro`, `item` e `spot` continuam abertos, e
+continuam sendo risco aceito — só que agora consta aqui, e não só dentro do SQL.
+
 **24. Preço de Market não existe em nenhuma das duas APIs** — só `npcvalue`/`value` do wiki, que é
 referência de NPC. Não inventar número e apresentar como preço.
 
@@ -251,9 +289,33 @@ cliente Supabase de servidor. O padrão é: shell estático na página, dados do
 `async` atrás da fronteira. A documentação da versão instalada está em
 `node_modules/next/dist/docs/` e é a fonte a consultar, não a memória.
 
+**51. Migration já aplicada pode ser reescrita — sob duas condições, e MEDINDO.** A regra normal é
+que migration é histórico e não se toca: reescrever faz o banco de quem já rodou divergir do de quem
+rodar amanhã. Em 2026-09-22 dois arquivos foram fundidos num só assim mesmo, porque as duas
+condições valiam: existe **um** banco, e o estado final é **idêntico**.
+
+A segunda não se presume. O schema real foi lido coluna a coluna antes e depois — `perfil` sem a
+coluna removida e com `fuso`, `personagem` com os campos que o `0003` acrescentou, `sessao` com
+`personagem_id` e `pasta_id`, as funções derrubadas de fato mortas, a view com as colunas certas.
+Sem essa leitura é chute com cara de faxina, e o preço aparece meses depois, num banco montado do
+zero que não bate com produção.
+
+O que se ganha: um banco novo deixa de criar objeto para derrubá-lo dois arquivos adiante — e o que
+se derrubava ali eram funções `security definer` com `grant execute to authenticated`, feitas para
+atravessar a RLS de propósito. Código morto que ainda responde é pior que código morto.
+
 ---
 
 ## Código
+
+**50. Detalhe de lista se busca ao ABRIR, não junto da lista.** O analyzer de uma sessão mostra
+monstros e itens; a sessão medida em 22/09 tinha 4 monstros e **38 itens**, e a tela carrega até 500
+sessões. Trazer o detalhe de todas seriam ~20 mil linhas em **toda** visita, para mostrar as de uma
+só quando alguém clica.
+
+`app/hunts/detalhe.ts` busca quando pedem, e o componente guarda o que voltou: reabrir não volta ao
+banco, porque sessão encerrada não muda. Dado imutável é o caso em que guardar no cliente sai de
+graça — não há invalidação para acertar.
 
 **29. Testes contra fixtures gravadas, nunca contra a API ao vivo.** Respostas reais em
 `test/fixtures/`, parsers testados contra elas. Um script separado revalida as fixtures contra a
