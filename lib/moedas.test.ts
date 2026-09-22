@@ -70,6 +70,26 @@ ok("profit e alto", s26.profit, 2305437);
 ok("mas o caixa e NEGATIVO", s26.caixa, -54655);
 ok("e o caixa negativo nao torna o dado inconsistente", s26.consistente, true);
 
+console.log("\n== A INVARIANTE que a tela exibe: as duas metades somam o profit");
+// caixa + itens = (moedas - supplies) + (loot - moedas) = loot - supplies.
+// A tela PROMETE essa soma ao usuario, entao ela tem de valer sempre: com caixa
+// negativo, sem moeda nenhuma, sem supplies, e com profit negativo.
+const casos: [string, number, number, { nome: string; quantidade: number }[]][] = [
+  ["sessao 28", 1381597, 179668, sessao28],
+  ["sessao 26 (caixa negativo)", 2828026, 522589, [
+    { nome: "gold coin", quantidade: 123534 },
+    { nome: "platinum coin", quantidade: 3444 },
+  ]],
+  ["sem moeda alguma", 50000, 10000, [{ nome: "soul orb", quantidade: 3 }]],
+  ["sem supplies", 90000, 0, [{ nome: "crystal coin", quantidade: 5 }]],
+  ["tudo zero", 0, 0, []],
+  ["profit negativo", 1000, 9000, [{ nome: "gold coin", quantidade: 100 }]],
+];
+for (const [nome, loot, supplies, itens] of casos) {
+  const r = separarLoot(loot, supplies, itens);
+  ok(`  ${nome}`, r.caixa + r.itens, r.profit);
+}
+
 console.log("\n== dado inconsistente e sinalizado, nao escondido");
 // Moeda acima do loot nao deveria existir; se existir, quem chama precisa saber
 // em vez de receber um "a vender" negativo com cara de normal.

@@ -358,7 +358,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
 
               <Caixa
                 s={separado}
-                titulo={pastaAtual ? "Do loot da pasta, quanto já é dinheiro" : "Do loot acumulado, quanto já é dinheiro"}
+                titulo={pastaAtual ? "De onde vem o profit desta pasta" : "De onde vem o profit acumulado"}
               />
 
               {meta && <Meta meta={meta} progresso={progresso} precoTc={precoTc} />}

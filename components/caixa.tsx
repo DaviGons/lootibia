@@ -3,35 +3,44 @@ import type { LootSeparado } from "@/lib/moedas";
 const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 
 /**
- * Quanto do loot já é dinheiro, e quanto ainda é mercadoria.
+ * De onde vem o profit: o que já é dinheiro e o que ainda é mercadoria.
  *
- * Só gold, platinum e crystal coin caem direto no balance do personagem —
- * nenhum outro item do Tibia inteiro faz isso (`lib/moedas.ts`). O `Loot` do
- * jogo soma os dois, e os supplies você paga em dinheiro vivo; daí "já no
- * bolso" ser `moedas − supplies`, e não uma fatia do profit.
+ * ## Escrito para quem nunca ouviu falar disso
  *
- * Os dois números aparecem **juntos, sem alternar**. O que informa é a
- * DISTÂNCIA entre eles: um seletor esconderia metade da comparação e obrigaria
- * a ir e voltar para fazer a conta de cabeça.
+ * O painel aparece logo abaixo de um profit enorme e positivo, e a primeira
+ * coisa que ele mostra pode ser um número NEGATIVO. Sem explicação isso parece
+ * erro de conta, e quem vê vai perguntar — que é exatamente o que não se quer.
  *
- * Serve a tela (acumulado da pasta) e o analyzer (uma sessão) — é a mesma
- * pergunta em duas escalas, então é o mesmo componente. Sem `"use client"`:
- * não tem estado nem evento, e assim funciona nos dois.
+ * Três coisas resolvem isso, e todas ficam SEMPRE visíveis:
+ *
+ * 1. **A soma.** `caixa + itens = profit`, sempre — é álgebra, não coincidência:
+ *    `(moedas − supplies) + (loot − moedas) = loot − supplies`. Dizer isso na
+ *    tela transforma "dois números que se contradizem" em "duas parcelas do
+ *    mesmo número". `lib/moedas.test.ts` trava a invariante, inclusive com
+ *    profit negativo — a tela promete a conta, então ela tem de fechar.
+ * 2. **O porquê**, em uma frase, sem jargão: só três moedas caem direto no
+ *    balance do personagem.
+ * 3. **Rótulos que dizem o que é**, não como se chama: "já caiu na sua conta"
+ *    em vez de "líquido", "ainda precisa vender" em vez de "a realizar".
+ *
+ * ## Duas escalas, um componente
+ *
+ * Serve o acumulado da pasta e uma sessão só — é a mesma pergunta. Sem
+ * `"use client"`: não tem estado nem evento, e assim roda nos dois lugares.
  */
 export function Caixa({ s, titulo }: { s: LootSeparado; titulo: string }) {
-  const total = s.moedas + s.itens;
-  const fatiaEmMoeda = total > 0 ? s.moedas / total : 0;
+  const loot = s.moedas + s.itens;
+  const fatiaEmMoeda = loot > 0 ? s.moedas / loot : 0;
 
   return (
     <section className="entra rounded-xl border bg-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-xs font-semibold">{titulo}</h2>
         {/* Com dado inconsistente a fração passa de 100% e vira estatística
-            falsa ao lado do próprio aviso de que o dado não presta. Melhor não
-            dizer nada do que dizer "1000% em moeda". */}
+            falsa ao lado do próprio aviso de que o dado não presta. */}
         {s.consistente && (
           <span className="text-[11px] tabular-nums text-muted-foreground">
-            {(fatiaEmMoeda * 100).toFixed(1)}% em moeda
+            {(fatiaEmMoeda * 100).toFixed(1)}% do loot veio em moeda
           </span>
         )}
       </div>
@@ -42,7 +51,7 @@ export function Caixa({ s, titulo }: { s: LootSeparado; titulo: string }) {
         <div
           className="h-2.5 overflow-hidden rounded-full bg-[hsl(var(--dado-trilho))]"
           role="img"
-          aria-label={`${num(s.moedas)} em moeda, ${num(s.itens)} em item`}
+          aria-label={`${num(s.moedas)} do loot em moeda, ${num(s.itens)} em item`}
         >
           <span
             className="block h-full rounded-r-[4px] bg-[hsl(var(--dado))]"
@@ -56,33 +65,78 @@ export function Caixa({ s, titulo }: { s: LootSeparado; titulo: string }) {
         </p>
       )}
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <div className="text-[11px] text-muted-foreground">Já no bolso</div>
-          <div
-            className={`text-sm font-semibold tabular-nums ${s.caixa < 0 ? "text-destructive" : ""}`}
-          >
-            {num(s.caixa)}
-          </div>
-          <div className="text-[11px] leading-relaxed text-muted-foreground">
-            {num(s.moedas)} em moeda − {num(s.supplies)} de supplies
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground">Ainda por vender</div>
-          <div className="text-sm font-semibold tabular-nums">{num(s.itens)}</div>
-          <div className="text-[11px] leading-relaxed text-muted-foreground">
-            avaliação do jogo, que é referência de NPC — não preço de mercado
-          </div>
-        </div>
+      {/* A conta, explícita. É o que impede o painel de parecer contraditório. */}
+      <div className="mt-4 grid items-start gap-x-3 gap-y-4 sm:grid-cols-[1fr_auto_1fr_auto_auto]">
+        <Parcela
+          rotulo="Já caiu na sua conta"
+          valor={s.caixa}
+          nota={`${num(s.moedas)} de moeda − ${num(s.supplies)} de supplies`}
+          alerta={s.caixa < 0}
+        />
+        <Operador sinal="+" />
+        <Parcela
+          rotulo="Ainda precisa vender"
+          valor={s.itens}
+          nota="quanto o jogo acha que vale, por referência de NPC — não preço de mercado"
+        />
+        <Operador sinal="=" />
+        <Parcela rotulo="Profit" valor={s.profit} destaque />
       </div>
 
-      {s.consistente && s.caixa < 0 && (
-        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          Consumiu mais supply do que caiu de moeda: em dinheiro vivo ficou negativa, e só fica
-          positiva depois de vender o loot.
-        </p>
-      )}
+      <p className="mt-4 border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
+        <b className="text-foreground">Por que separar:</b> no Tibia, só{" "}
+        <b className="text-foreground">gold coin</b>, <b className="text-foreground">platinum coin</b>{" "}
+        e <b className="text-foreground">crystal coin</b> caem direto no balance do personagem. Todo
+        o resto do loot é item, e item só vira dinheiro quando você vende.
+        {s.consistente && s.caixa < 0 && (
+          <>
+            {" "}
+            Aqui os supplies custaram mais do que caiu de moeda — por isso a primeira parcela está
+            negativa. O profit continua certo: ele só depende de você vender o loot.
+          </>
+        )}
+      </p>
     </section>
+  );
+}
+
+function Parcela({
+  rotulo,
+  valor,
+  nota,
+  alerta,
+  destaque,
+}: {
+  rotulo: string;
+  valor: number;
+  nota?: string;
+  alerta?: boolean;
+  destaque?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] text-muted-foreground">{rotulo}</div>
+      <div
+        className={`tabular-nums ${destaque ? "text-base font-semibold" : "text-sm font-semibold"} ${
+          alerta ? "text-destructive" : ""
+        }`}
+      >
+        {num(valor)}
+      </div>
+      {nota && <div className="text-[11px] leading-relaxed text-muted-foreground">{nota}</div>}
+    </div>
+  );
+}
+
+/**
+ * O `+` e o `=` entre as parcelas. Some no celular, onde as parcelas empilham e
+ * um sinal solto no meio da coluna confundiria em vez de explicar — lá quem faz
+ * o mesmo trabalho é o rótulo "Profit" fechando a lista.
+ */
+function Operador({ sinal }: { sinal: string }) {
+  return (
+    <div aria-hidden className="hidden self-center text-sm text-muted-foreground sm:block">
+      {sinal}
+    </div>
   );
 }
