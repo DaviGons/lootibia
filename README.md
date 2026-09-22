@@ -106,6 +106,7 @@ node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
 node --experimental-strip-types lib/metaRashid.test.ts
 node --experimental-strip-types lib/moedas.test.ts
+node --experimental-strip-types lib/nomesDeItem.test.ts
 ```
 
 Os testes não usam framework: rodam com `node --experimental-strip-types` e comparam com

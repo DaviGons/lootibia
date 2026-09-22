@@ -121,9 +121,19 @@ node --experimental-strip-types lib/hunt.test.ts
 
 ## Em aberto
 
-1. **Plural dos nomes.** O jogo escreve `great mana potions` no plural; o wiki indexa
-   `Great Mana Potion`. O parser remove o artigo mas **não** resolve plural — o de-para é tabela à
-   parte (diretriz 23). Sem isso não dá para cruzar loot com `npcvalue` do wiki.
+1. ~~**Plural dos nomes.**~~ **RESOLVIDO em 2026-09-22 — e a premissa estava errada.** Este item
+   afirmava que o jogo escreve `great mana potions` no plural. **Não escreve.** O fixture logo acima
+   traz `413x a great mana potion`: singular, com artigo, na quantidade 413. E 136 itens de 7
+   sessões reais não têm **nenhum** par singular/plural.
+
+   O problema real era outro: a API do wiki é **sensível a caixa**, e a convenção dela não é Title
+   Case inglês. `Wand of Inferno` responde 200; `Wand Of Inferno`, **404**. Resolvido em
+   [lib/nomesDeItem.ts](../lib/nomesDeItem.ts), com cobertura medida por
+   `scripts/conferir-itens.ts`: **135 de 136** itens do banco encontram página, e o único que falha
+   é um registro com nome truncado que nenhuma sessão usa.
+
+   Criatura é outra história: ali o plural existe de verdade (a TibiaData escreve
+   `Dark Torturers`), e quem resolve é `lib/nomesDeCriatura.ts`.
 2. **Variantes do formato.** Só o Hunt Analyser pessoal foi analisado; o de party tem outro layout
    (por jogador). Campos desconhecidos já caem em `camposIgnorados` sem quebrar o parse.
 3. **Valor do loot.** O `Loot` que o jogo dá já vem em gold; nenhuma API tem preço de Market
