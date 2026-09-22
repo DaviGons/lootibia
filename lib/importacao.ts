@@ -1,17 +1,17 @@
 /**
- * Ver docs/hunt-analyser.md e docs/bot-discord.md.
+ * Ver docs/hunt-analyser.md.
  *
  * Importação de uma sessão do Hunt Analyser para o banco.
  *
- * Nasceu dentro de `app/hunts/acoes.ts` e saiu de lá quando o bot do Discord
- * apareceu: são duas cascas (server action e slash command) sobre exatamente o
- * mesmo trabalho. Duplicar isto significaria duas conversões de fuso e dois
- * tratamentos de duplicata que divergem no primeiro ajuste.
+ * Nasceu dentro de `app/hunts/acoes.ts` e saiu de lá quando houve duas cascas
+ * sobre exatamente o mesmo trabalho. Restou uma, e a separação continua boa:
+ * junta aqui a conversão de fuso e o tratamento de duplicata, que dentro de um
+ * arquivo de UI ficariam misturados com leitura de formulário.
  *
  * Nenhuma linha de Next aqui. A dependência do Supabase é só o TIPO do cliente —
- * quem monta o cliente é o chamador, e é essa costura que deixa a RLS valer nos
- * dois caminhos: no site o cliente carrega o cookie do usuário; no bot, o JWT
- * que `lib/supabase/bot.ts` assina.
+ * quem monta o cliente é o chamador, e é essa costura que deixa a RLS valer:
+ * o cliente que chega carrega o cookie do usuário, e as políticas valem por
+ * ele, não por este arquivo.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -96,7 +96,7 @@ export function instanteDoRelogioLocal(relogio: string, fuso: string): Date {
   return new Date(ts);
 }
 
-/** Fuso IANA que o runtime reconhece? Entrada do bot não é confiável. */
+/** Fuso IANA que o runtime reconhece? Entrada de fora não é confiável. */
 export function fusoValido(fuso: string): boolean {
   try {
     new Intl.DateTimeFormat("en-CA", { timeZone: fuso });
@@ -145,8 +145,8 @@ export async function idsPorNome(
  * Parseia, resolve os lookups e grava a sessão com as linhas de detalhe.
  *
  * Devolve resultado tipado em vez de lançar nos casos esperados: duplicata e
- * texto inválido são o dia a dia, não excepcionais, e cada casca quer
- * apresentá-los do seu jeito (parágrafo de erro no site, embed no Discord).
+ * texto inválido são o dia a dia, não excepcionais, e quem chama decide como
+ * apresentá-los.
  */
 export async function importarSessao(
   supabase: SupabaseClient,

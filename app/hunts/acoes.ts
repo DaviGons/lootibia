@@ -15,9 +15,9 @@ export interface ResultadoImportacao {
  * O trabalho de verdade mora em `lib/importacao.ts`; aqui fica só o que é da
  * casca web: ler o `FormData`, conferir o login e revalidar a rota.
  *
- * A separação nasceu porque havia duas cascas — esta e o slash command do bot.
- * O bot se foi, a separação fica: ela é o que mantém a conversão de fuso e o
- * tratamento de duplicata fora de um arquivo de UI.
+ * A separação nasceu quando houve duas cascas sobre o mesmo trabalho. Restou
+ * uma, e a separação fica: é ela que mantém a conversão de fuso e o tratamento
+ * de duplicata fora de um arquivo de UI.
  */
 export async function importarSessao(
   _anterior: ResultadoImportacao | null,
@@ -75,11 +75,9 @@ type ClienteServidor = Awaited<ReturnType<typeof createClient>>;
 /**
  * Grava o fuso IANA no perfil. Falha aqui não pode derrubar a importação.
  *
- * A tabela `perfil` nasceu em 2026-09-17 para o bot do Discord, que precisava
- * herdar o fuso de alguém — ele não tem navegador de onde tirá-lo. O bot foi
- * aposentado, a coluna `discord_id` foi embora com ele, mas o `fuso` **fica**:
- * é ele que diz a que dia de Tibia uma sessão pertence quando o relógio do
- * Hunt Analyser não traz fuso nenhum (docs/periodos.md).
+ * A tabela `perfil` existe por causa desta coluna: é o `fuso` que diz a que
+ * dia de Tibia uma sessão pertence, e o relógio do Hunt Analyser não traz fuso
+ * nenhum no texto que o jogador cola (docs/periodos.md).
  */
 async function guardarFuso(
   supabase: ClienteServidor,

@@ -33,7 +33,7 @@
  * Essa flag é **porteiro de fluxo, não fronteira de segurança** — `user_metadata`
  * é gravável pelo próprio dono, então um usuário determinado consegue virá-la
  * sem trocar a senha. O que ele ganha com isso é continuar com uma senha que o
- * Davi mandou por Discord; não ganha acesso a dado de mais ninguém, porque quem
+ * Davi mandou por mensagem; não ganha acesso a dado de ninguém mais, porque quem
  * isola continua sendo a RLS. A segurança de verdade está no código ser um
  * segredo de ~49 bits, não em quem pode escrever a flag.
  */
@@ -88,7 +88,7 @@ export function usuarioDoEmail(email: string | undefined): string | null {
 /**
  * Alfabeto sem os pares que se confundem em fonte de tela e na leitura em voz
  * alta: sem `0`/`O`, sem `1`/`I`/`L`. Sobram 31 símbolos, e o código vai ser
- * ditado por Discord ou copiado à mão.
+ * ditado por mensagem ou copiado à mão.
  */
 const ALFABETO = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 

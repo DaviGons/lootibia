@@ -9,7 +9,7 @@
 -- O que muda no produto: a semana deixa de ser o eixo da tela. Quem organiza
 -- passa a ser a PASTA, criada e nomeada pelo usuário, com meta opcional em TC
 -- ou em gp. `lib/periodo.ts` continua de pé — ele é quem sabe que dia de Tibia
--- é hoje, e é disso que dependem o `/viewstats` do bot e a cidade do Rashid.
+-- é hoje, e é disso que depende a cidade do Rashid.
 
 -- ---------------------------------------------------------------------------
 -- Pastas
