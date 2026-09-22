@@ -53,7 +53,7 @@ ok("so o dominio devolve null", usuarioDoEmail(`@${DOMINIO}`), null);
 console.log("== codigo de ativacao");
 const codigo = gerarCodigo();
 ok("formato XXXXX-XXXXX", /^[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}$/.test(codigo), true);
-// Sem 0/O e sem 1/I/L: o codigo e ditado no Discord e digitado a mao.
+// Sem 0/O e sem 1/I/L: o codigo e ditado por mensagem e digitado a mao.
 ok("sem caractere ambiguo", /[01OIL]/.test(codigo), false);
 const amostra = new Set(Array.from({ length: 400 }, () => gerarCodigo()));
 ok("400 sorteios sem repetir", amostra.size, 400);

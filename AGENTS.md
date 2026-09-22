@@ -10,7 +10,6 @@ Referências técnicas verificadas — **ler antes de escrever código que toque
 - [docs/stack.md](docs/stack.md) — limites reais dos planos gratuitos, Supabase+Next.js, RLS, Tailwind.
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
-- [docs/bot-discord.md](docs/bot-discord.md) — póstumo do bot, e o que sobrou dele na `main`.
 
 ## Escopo
 
@@ -34,15 +33,13 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
-**Bot do Discord: APOSENTADO em 2026-09-22.** Esteve no ar de 17 a 22 de setembro. Na prática
-ninguém usava, e manter uma segunda casca sobre o mesmo domínio saía mais caro do que valia. O
-código inteiro vive na branch **`abandonado/bot-discord`**, que não recebe mais commits; o schema
-dele foi derrubado por `supabase/migrations/0004_aposenta_bot_discord.sql`.
+**Houve uma integração externa, e ela foi removida por completo em 2026-09-22** — código, schema,
+documentação e branches. Não resta ponta solta a manter, e **não é para ressuscitá-la**.
 
-O que sobreviveu, e por quê, está em [docs/bot-discord.md](docs/bot-discord.md) — em resumo:
-`lib/importacao.ts` (o núcleo compartilhado, que continua fora da UI), `lib/supabase/jwt.ts` (era
-`bot.ts`; `scripts/testar-pastas.ts` depende dele para exercitar a RLS de verdade), a tabela
-`personagem` e `perfil.fuso`.
+Quatro peças nasceram naquele contexto e hoje sustentam o site — **não apague nenhuma achando que
+é sobra**: `lib/importacao.ts` (o núcleo da importação, que continua fora da UI),
+`lib/supabase/jwt.ts` (de que `scripts/testar-pastas.ts` depende para exercitar a RLS de verdade),
+a tabela `personagem` e a coluna `perfil.fuso`.
 
 Em aberto: o de-para de plural dos **itens** (`great mana potions` → `Great Mana Potion`) não
 existe, e sem ele não dá para cruzar loot com `npcvalue` do wiki.
@@ -82,8 +79,7 @@ desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor d
 lâmina em `--primary`. Geometria em [lib/marca.ts](lib/marca.ts), componentes em
 [components/marca.tsx](components/marca.tsx), arquivos de imagem gerados por
 `scripts/gerar-marca.ts` (diretriz 37). A cor chegou aos cinco lugares: tokens do site,
-telas de auth, `app/icon.svg` + `favicon.ico` + `apple-icon.png` e cartão social. O quinto era a
-cor dos embeds do bot do Discord, que foi aposentado em 22/09.
+telas de auth, `app/icon.svg` + `favicon.ico` + `apple-icon.png` e cartão social.
 
 ---
 
@@ -303,7 +299,7 @@ a chave publicável. Pôr a secreta em produção aumentaria a superfície sem d
 
 **40. `senha_definida` é porteiro de fluxo, não fronteira de segurança.** A flag vive em
 `user_metadata`, que o próprio dono consegue gravar — quem quiser vira a flag sem trocar a senha.
-O que ele ganha é continuar com uma senha que o Davi mandou por Discord; não ganha dado de mais
+O que ele ganha é continuar com uma senha que o Davi mandou por mensagem; não ganha dado de mais
 ninguém, porque quem isola continua sendo a RLS. A segurança real está no código de ativação ser
 um segredo de ~49 bits sorteado com `crypto.getRandomValues`. Não transformar essa flag em
 autorização de coisa alguma.
@@ -325,8 +321,8 @@ Duas armadilhas irmãs, do mesmo episódio:
   Aí vem `error` preenchido com o cookie ainda válido; tratar como deslogado vira soluço de rede
   em sessão perdida. Sem sessão é `data` e `error` os dois nulos, e só isso manda para o login.
 
-**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21, o `/viewstats`
-do bot morreu em 22/09, e a tentação seguinte é apagar o motor de dia do jogo. **Não apague.**
+**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21 e o outro
+consumidor morreu em 22/09. A tentação seguinte é apagar o motor de dia do jogo. **Não apague.**
 
 Ele é quem sabe que **o dia de Tibia vira no server save**, às 10:00 de Berlim. Hoje quem depende
 disso é a cidade do Rashid — e sim, é um consumidor só. Não é motivo para apagar: o dia do jogo é

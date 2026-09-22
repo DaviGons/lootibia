@@ -3,11 +3,9 @@
  *
  * ## Por que isto existe, se ninguém faz login por aqui
  *
- * Nasceu em 2026-09-17 para o bot do Discord, que precisava falar pelo usuário
- * sem ter um cookie de sessão. O bot foi aposentado em 2026-09-22 (ver
- * `docs/bot-discord.md`), mas este arquivo **não foi junto**: quem passou a
- * depender dele é `scripts/testar-pastas.ts`, o teste que exercita a RLS pelo
- * mesmo caminho da tela (diretriz 46).
+ * Quem depende dele é `scripts/testar-pastas.ts`, o teste que exercita a RLS
+ * pelo mesmo caminho da tela (diretriz 46) — e para isso precisa CHEGAR no
+ * banco como um usuário, sem ter um cookie de sessão para apresentar.
  *
  * E é justamente isso que dá valor ao teste. Usar a chave secreta seria mais
  * fácil e testaria a coisa errada: ela **ignora a RLS**, e a RLS é o que o teste
@@ -23,8 +21,8 @@
  * `still used — used only to verify JWTs`: ele parou de *emitir* em HS256, mas
  * continua **verificando**, que é o lado de que precisamos.
  *
- * Verificado contra o projeto real em 2026-09-17: token assinado aqui aceito
- * (`200`), token forjado recusado (`401`).
+ * Verificado contra o projeto real: token assinado aqui aceito (`200`), token
+ * forjado recusado (`401`).
  *
  * Se o segredo for revogado, `scripts/testar-pastas.ts` passa a falhar com `401`
  * em tudo. A saída é reabilitá-lo no painel, ou reescrever o teste para outra

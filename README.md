@@ -46,19 +46,13 @@ quebrar.
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. Em *Project Settings → API*, copie a URL e a **chave publicável** para o `.env.local`.
-3. No *SQL Editor*, rode os migrations **na ordem**:
+3. No *SQL Editor*, rode os três migrations **na ordem**:
    [`0001_schema.sql`](supabase/migrations/0001_schema.sql),
-   [`0002_bot_discord.sql`](supabase/migrations/0002_bot_discord.sql),
-   [`0003_pastas_e_metas.sql`](supabase/migrations/0003_pastas_e_metas.sql) e
-   [`0004_aposenta_bot_discord.sql`](supabase/migrations/0004_aposenta_bot_discord.sql).
+   [`0002_personagem_e_perfil.sql`](supabase/migrations/0002_personagem_e_perfil.sql) e
+   [`0003_pastas_e_metas.sql`](supabase/migrations/0003_pastas_e_metas.sql).
    Eles criam as tabelas, a view de período e **todas as políticas de RLS**.
 4. Em *Authentication → Sign In / Providers*, **desligue "Allow new users to sign up"**. Não é
    detalhe: sem isso o endpoint do GoTrue aceita cadastro de quem souber o caminho, mesmo sem tela.
-
-> O `0002` cria o que o bot do Discord usava e o `0004` derruba de novo. Parece desperdício e não é:
-> migration é histórico, não estado desejado — reescrever o `0002` faria o banco de quem já rodou
-> divergir do de quem rodar amanhã. O bot foi aposentado em 22/09; o porquê está em
-> [`docs/bot-discord.md`](docs/bot-discord.md).
 
 > O plano Free **pausa o projeto após 1 semana de inatividade**.
 
