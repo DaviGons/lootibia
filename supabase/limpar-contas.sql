@@ -11,9 +11,9 @@
 -- delas passa por `usuarioDoEmail` — ficariam no banco sem conseguir entrar e
 -- sem aparecer em `criar-usuario.ts --listar`.
 --
--- O `delete` em `auth.users` basta: `sessao`, `perfil` e `codigo_vinculo`
--- referenciam `auth.users(id)` com `on delete cascade`, e `sessao_monstro` e
--- `sessao_item` caem junto com a sessão. As tabelas de lookup (`monstro`,
+-- O `delete` em `auth.users` basta: `sessao`, `perfil`, `pasta`, `config_mundo`
+-- e `usuario_personagem` referenciam `auth.users(id)` com `on delete cascade`, e
+-- `sessao_monstro` e `sessao_item` caem junto com a sessão. As tabelas de lookup (`monstro`,
 -- `item`, `spot`) sobrevivem, e é o certo — são vocabulário do jogo, não dado
 -- de ninguém.
 

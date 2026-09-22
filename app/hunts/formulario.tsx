@@ -1,12 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
-import {
-  importarSessao,
-  gerarCodigoDeVinculo,
-  type ResultadoImportacao,
-  type ResultadoVinculo,
-} from "./acoes";
+import { useActionState, useEffect, useState } from "react";
+import { importarSessao, type ResultadoImportacao } from "./acoes";
 
 const CAMPO =
   "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20";
@@ -85,66 +80,5 @@ export function FormularioImportacao() {
         </p>
       )}
     </form>
-  );
-}
-
-/**
- * Gera o código que o `/cadastro` do bot do Discord consome.
- *
- * Vive fora do `<form>` de importação: um formulário aninhado dentro do outro
- * não é HTML válido, e o navegador desmonta a árvore em silêncio.
- *
- * O código aparece na tela e é digitado num modal do Discord — que ninguém mais
- * vê. É por isso que o bot não aceita o código como argumento de slash command:
- * argumento aparece no canal (ver docs/bot-discord.md, decisão 2).
- */
-export function VinculoDiscord() {
-  const [estado, setEstado] = useState<ResultadoVinculo | null>(null);
-  const [gerando, comTransicao] = useTransition();
-
-  // `useTransition` e não `useActionState`: a ação não lê campo nenhum, e um
-  // `<form>` só para envolver um botão obrigaria a action a receber um FormData
-  // que ela ignora.
-  const gerar = () =>
-    comTransicao(async () => {
-      setEstado(await gerarCodigoDeVinculo());
-    });
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={gerar}
-          disabled={gerando}
-          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-[transform,opacity,border-color] duration-200 hover:border-primary/40 active:scale-[0.98] disabled:opacity-50"
-        >
-          {gerando && (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          )}
-          {gerando ? "Gerando…" : "Gerar código de vínculo"}
-        </button>
-        <span className="text-xs text-muted-foreground">
-          Depois rode <code className="rounded bg-muted px-1">/cadastro</code> no Discord.
-        </span>
-      </div>
-
-      {estado?.ok && estado.codigo && (
-        <div className="entra rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
-          {/* Fonte monoespaçada e espaçamento largo: o código é transcrito à mão. */}
-          <div className="font-mono text-xl font-semibold tracking-[0.2em]">{estado.codigo}</div>
-          <p className="mt-1 text-xs text-muted-foreground">{estado.mensagem}</p>
-        </div>
-      )}
-
-      {estado && !estado.ok && (
-        <p
-          role="status"
-          className="entra rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-        >
-          {estado.mensagem}
-        </p>
-      )}
-    </div>
   );
 }

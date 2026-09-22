@@ -10,7 +10,7 @@ Referências técnicas verificadas — **ler antes de escrever código que toque
 - [docs/stack.md](docs/stack.md) — limites reais dos planos gratuitos, Supabase+Next.js, RLS, Tailwind.
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
-- [docs/bot-discord.md](docs/bot-discord.md) — desenho e implementação do bot, e as armadilhas encontradas.
+- [docs/bot-discord.md](docs/bot-discord.md) — póstumo do bot, e o que sobrou dele na `main`.
 
 ## Escopo
 
@@ -34,29 +34,18 @@ Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 isolando por usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de
 ponta a ponta. A tela `/hunts` importa, lista, apaga e mostra o acumulado da semana com sprites.
 
-**Bot do Discord: NO AR desde 2026-09-17, alinhado às pastas em 2026-09-21.** Quatro comandos
-(`/cadastro`, `/addhunt`, `/viewstats`, `/meta`) num endpoint de HTTP Interactions em
-`app/api/discord/route.ts`, servido pelo mesmo deploy da Vercel — não há processo nem host a mais.
+**Bot do Discord: APOSENTADO em 2026-09-22.** Esteve no ar de 17 a 22 de setembro. Na prática
+ninguém usava, e manter uma segunda casca sobre o mesmo domínio saía mais caro do que valia. O
+código inteiro vive na branch **`abandonado/bot-discord`**, que não recebe mais commits; o schema
+dele foi derrubado por `supabase/migrations/0004_aposenta_bot_discord.sql`.
 
-O que mudou em 21/09: `/addhunt` ganhou **seletor de pasta dentro do modal** (antes toda hunt vinda
-do Discord caía em "Sem pasta" e só dava para arquivar abrindo o site), `/viewstats` ganhou filtro
-de pasta **sem perder o de período**, e nasceu o `/meta`. A referência de componentes do Discord
-mudou desde setembro e forçou uma migração — ver diretriz 47.
+O que sobreviveu, e por quê, está em [docs/bot-discord.md](docs/bot-discord.md) — em resumo:
+`lib/importacao.ts` (o núcleo compartilhado, que continua fora da UI), `lib/supabase/jwt.ts` (era
+`bot.ts`; `scripts/testar-pastas.ts` depende dele para exercitar a RLS de verdade), a tabela
+`personagem` e `perfil.fuso`.
 
-`supabase/migrations/0002_bot_discord.sql` aplicado e conferido (RLS ligada em toda tabela nova;
-`sessao_periodo` recriada com `personagem_id`). App `Lootibia` registrado no Discord, endpoint
-validado por ele, comandos registrados no servidor com `scripts/registrar-comandos.ts`.
-
-Três coisas foram provadas em produção, não presumidas: o Discord **aceitou** a Interactions
-Endpoint URL (ou seja, a verificação Ed25519 responde `200` ao `PING` assinado e `401` ao lixo); o
-Supabase **aceita** o JWT que o bot assina (`scripts/checar-jwt.ts`); e o `after()` **roda na
-Vercel**, o que se conclui de `/cadastro` e `/addhunt` concluírem — todo o trabalho deles acontece
-lá dentro (diretriz 35).
-
-Em aberto: o de-para de plural dos
-**itens** (`great mana potions` → `Great Mana Potion`) não existe, e sem ele não dá para cruzar loot
-com `npcvalue` do wiki; `/ranking` e o `/hunts` do bot ficaram fora da primeira entrega; e o JWT do
-bot depende do segredo HS256 legado do Supabase continuar aceito (ver diretriz 34).
+Em aberto: o de-para de plural dos **itens** (`great mana potions` → `Great Mana Potion`) não
+existe, e sem ele não dá para cruzar loot com `npcvalue` do wiki.
 
 **Login por usuário e senha desde 2026-09-19.** Não existe
 cadastro: o Davi cria as contas com `scripts/criar-usuario.ts`, que sorteia um código de ativação.
@@ -81,8 +70,8 @@ uma sessão real, e ninguém entrou ainda com um código.
 **Pastas com meta, em implementação desde 2026-09-21.** A semana saiu da tela: quem organiza é a
 PASTA, criada e nomeada pelo usuário, com meta opcional em TC ou gp. Schema em
 `supabase/migrations/0003_pastas_e_metas.sql`. `lib/periodo.ts` **continua de pé** — deixou de ser
-o eixo da interface e virou o motor que sabe a que dia de jogo um instante pertence, do qual
-dependem o `/viewstats` do bot e a cidade do Rashid (diretriz 42).
+o eixo da interface e virou o motor que sabe a que dia de jogo um instante pertence, do qual depende
+a cidade do Rashid (diretriz 42).
 
 Novos módulos: [lib/meta.ts](lib/meta.ts) (progresso, conversão TC↔gp),
 [lib/rashid.ts](lib/rashid.ts) (rotação semanal) e [lib/tibiadata.ts](lib/tibiadata.ts) (cliente
@@ -93,8 +82,8 @@ desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor d
 lâmina em `--primary`. Geometria em [lib/marca.ts](lib/marca.ts), componentes em
 [components/marca.tsx](components/marca.tsx), arquivos de imagem gerados por
 `scripts/gerar-marca.ts` (diretriz 37). A cor chegou aos cinco lugares: tokens do site,
-telas de auth, `app/icon.svg` + `favicon.ico` + `apple-icon.png`, cartão social, e `COR`/`COR_ERRO`
-em `lib/discord/protocolo.ts` — que deixaram de ser o verde genérico herdado do template.
+telas de auth, `app/icon.svg` + `favicon.ico` + `apple-icon.png` e cartão social. O quinto era a
+cor dos embeds do bot do Discord, que foi aposentado em 22/09.
 
 ---
 
@@ -117,7 +106,6 @@ npm run build
 node --experimental-strip-types lib/periodo.test.ts
 node --experimental-strip-types lib/hunt.test.ts
 node --experimental-strip-types lib/sprites.test.ts
-node --experimental-strip-types lib/discord.test.ts
 node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
 node --experimental-strip-types lib/metaRashid.test.ts
@@ -269,70 +257,6 @@ cliente Supabase de servidor. O padrão é: shell estático na página, dados do
 
 ---
 
-## Bot do Discord
-
-Desenho completo em [docs/bot-discord.md](docs/bot-discord.md). O que não se negocia:
-
-**34. A identidade do bot passa por JWT assinado, não por `service_role`.** Depois que
-`/cadastro` vinculou `discord_id → usuario_id`, `lib/supabase/bot.ts` assina um token com
-`sub = usuario_id` e **a RLS continua sendo quem isola os dados**. Com `service_role` o isolamento
-passaria a depender de cada `.eq('usuario_id', …)` do código — e `where` esquecido é bug comum,
-enquanto política de RLS não se esquece sozinha.
-
-Ressalva registrada: o projeto Supabase usa chaves **assimétricas (ES256)**, cuja privada não é
-exportável. A assinatura é em **HS256 com o segredo legado**, que o painel marca como
-`still used — used only to verify JWTs`. **Verificado em 2026-09-17** com
-`scripts/checar-jwt.ts`: token do bot aceito (`200`), token forjado recusado (`401`).
-
-Vale enquanto o segredo não for revogado. Se for, `lib/supabase/bot.ts` é o único arquivo a
-reescrever — todo o resto do bot fala com `clienteDoUsuario` e não sabe como o token nasceu. O
-sintoma será `401` sem explicação em qualquer comando; rodar `checar-jwt.ts` aponta a causa.
-
-**35. Trabalho de bot sempre atrás de `after()`.** Em serverless a invocação morre quando o handler
-retorna: sem `after()` (que na Vercel vira `waitUntil`), o que vem depois do defer simplesmente não
-roda e o usuário fica olhando "pensando…" para sempre. A exceção é o **modal, que precisa ser a
-resposta inicial** — não existe adiar e abrir modal depois.
-
-**47. A referência de componentes do Discord muda — reconferir antes de desenhar interação.** Em
-2026-09-17 o desenho registrou que "modal só aceita campo de texto". Em **2026-09-21 isso já era
-falso**: String Select, Radio Group e Checkbox valem em modal, dentro de uma **Label** (type 18). Foi
-o que permitiu o seletor de pasta do `/addhunt`. A diretriz 14 vale para o Discord e vale também
-para o **nosso próprio doc**: ele envelhece.
-
-Junto veio uma depreciação que nos atingiu — *"Action Row with Text Inputs in modals are now
-deprecated"* — e ela **muda o formato do submit**:
-
-```
-Label (atual):  { type: 18, component:  { type: 4, custom_id, value  } }
-Action Row:     { type: 1,  components: [{ type: 4, custom_id, value }] }
-```
-
-Singular contra plural. Um parser que só conheça `components[]` devolve `null` para **todo** campo,
-sem erro nenhum — o comando responderia "cole o texto do Hunt Analyser" para quem acabou de colar.
-`componentesDoModal` entende os dois, porque um modal aberto antes de um deploy pode ser submetido
-depois dele.
-
-E `value` é de Text Input; String Select devolve `values`, um array, mesmo com escolha única. Daí
-`campoDoModal` e `selecaoDoModal` serem funções separadas, com teste cruzado provando que cada uma
-devolve `null` para o tipo da outra.
-
-**48. Modal não adia, então o que ele precisa do banco corre contra um relógio.** `/addhunt` responde
-modal, e modal **tem de ser a resposta inicial** (diretriz 35). Montar o seletor exige buscar as
-pastas. Medido em 21/09: cold start até 1,49 s + primeira ida ao Supabase até 0,85 s = **2,34 s dos
-3 s**, e a medição saiu de fora da região da função.
-
-Por isso `dentroDoOrcamento()`: a busca corre contra 1,2 s e o que perder é descartado, não esperado.
-Estourado o prazo, o modal abre **sem** o seletor e a hunt cai em "Sem pasta" — o comportamento de
-antes. Degradar é ruim; "a aplicação não respondeu" é pior. Qualquer campo novo que dependa do banco
-entra por esse mesmo funil.
-
-**36. A assinatura Ed25519 é verificada sobre o corpo CRU.** Ler com `req.text()` e só então
-`JSON.parse`. Reserializar o objeto muda o texto e invalida a assinatura. Devolver `401` para
-assinatura inválida não é zelo: o Discord manda requisições quebradas de propósito e recusa
-registrar a URL que não reagir assim.
-
----
-
 ## Código
 
 **29. Testes contra fixtures gravadas, nunca contra a API ao vivo.** Respostas reais em
@@ -401,9 +325,13 @@ Duas armadilhas irmãs, do mesmo episódio:
   Aí vem `error` preenchido com o cookie ainda válido; tratar como deslogado vira soluço de rede
   em sessão perdida. Sem sessão é `data` e `error` os dois nulos, e só isso manda para o login.
 
-**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21, e a tentação
-seguinte é apagar o motor de dia do jogo. Não apague: ele é quem sabe que **o dia de Tibia vira no
-server save**, às 10:00 de Berlim, e disso dependem o `/viewstats` do bot e a cidade do Rashid.
+**42. `lib/periodo.ts` não é código morto.** A semana saiu da tela em 2026-09-21, o `/viewstats`
+do bot morreu em 22/09, e a tentação seguinte é apagar o motor de dia do jogo. **Não apague.**
+
+Ele é quem sabe que **o dia de Tibia vira no server save**, às 10:00 de Berlim. Hoje quem depende
+disso é a cidade do Rashid — e sim, é um consumidor só. Não é motivo para apagar: o dia do jogo é
+uma regra do domínio, não um detalhe de tela, e ela volta a fazer falta na primeira vez que alguém
+perguntar "quanto rendeu hoje".
 
 O Rashid muda de cidade no server save, não à meia-noite. Com `Date.getDay()` ele ficaria errado
 **10 horas por dia, todo dia** — às 08:00 de uma terça ele ainda está na cidade de segunda.
@@ -453,21 +381,19 @@ linha e gravo nela o `usuario_id` de outra pessoa.
 
 **46. Regra que vive no Postgres precisa de teste que fale com o Postgres.** Nenhum teste de
 `lib/` pegaria a diretriz 45: não há lógica errada, o `tsc` está feliz e a chamada "funciona".
-`scripts/testar-pastas.ts` existe para essa classe — ele assina um JWT de usuário (igual ao bot,
-diretriz 34) e exercita a RLS pelo mesmo caminho da tela:
+`scripts/testar-pastas.ts` existe para essa classe — ele assina um JWT de usuário e exercita a
+RLS pelo mesmo caminho da tela:
 
 ```bash
 node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
-node --experimental-strip-types --env-file=.env.local scripts/testar-bot-pastas.ts
 ```
 
-O segundo cobre o **bot**, que chega no mesmo banco por outro caminho: a tela grava `pasta_id` num
-`update` disparado por clique, o bot grava no `insert` da importação. Política faltando num dos dois
-não aparece no outro.
-
-Duas regras: eles **releem do banco** em vez de confiar no retorno da chamada — era exatamente o
-retorno que mentia —, e **não entram na diretriz 3**, porque precisam de credencial e de rede, e a
+Duas regras: ele **relê do banco** em vez de confiar no retorno da chamada — era exatamente o
+retorno que mentia —, e **não entra na diretriz 3**, porque precisa de credencial e de rede, e a
 lista de validação tem de rodar em qualquer máquina.
+
+Ele assina um JWT de usuário com `lib/supabase/jwt.ts`, e é isso que o torna válido: a chave
+secreta ignoraria a RLS, que é justamente o que se quer testar.
 
 Se precisar saber se a culpa é da RLS, repita a operação com a chave secreta, que a ignora: se
 funcionar lá e não com o JWT, é política faltando.

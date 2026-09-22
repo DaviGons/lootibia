@@ -8,23 +8,19 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - api/discord (ver abaixo)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * Feel free to modify this pattern to include more paths.
+     * Casa com tudo, menos:
+     * - _next/static (arquivos estáticos)
+     * - _next/image (otimização de imagem)
+     * - favicon.ico
+     * - imagens — .svg, .png, .jpg, .jpeg, .gif, .webp
      *
-     * `api/discord` PRECISA ficar de fora, e não é preferência: o proxy redireciona
-     * quem não tem sessão para /auth/login, e o Discord não manda cookie nenhum.
-     * Com ele no matcher, toda interação levava 307 e o bot nunca respondia —
-     * falha silenciosa, porque o Discord só mostra "a aplicação não respondeu".
-     *
-     * Quem autentica aquele endpoint é a assinatura Ed25519 (diretriz 36), não o
-     * cookie. De quebra, some uma ida ao Supabase por interação — e esse tempo sai
-     * direto da janela de 3 s.
+     * Havia aqui uma exceção para `api/discord`, que saiu junto com o bot em
+     * 2026-09-22. A lição fica, porque vale para a próxima rota pública: este
+     * proxy manda quem não tem sessão para `/auth/login`, então um endpoint
+     * chamado por terceiro — que não manda cookie nenhum — leva `307` e nunca
+     * roda. O sintoma é mudo do lado de lá, que foi o que custou caro.
+     * Rota pública sai do matcher. Ver docs/bot-discord.md.
      */
-    "/((?!api/discord|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
