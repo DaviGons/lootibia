@@ -9,7 +9,7 @@
  *
  * 1. O fixture gravado (`test/fixtures/sessao-indentada.txt`, diretriz 29) traz
  *    `413x a great mana potion` — singular, com artigo, na quantidade 413.
- * 2. 136 itens distintos de 7 sessões reais: **zero** pares singular/plural.
+ * 2. 135 itens distintos de 7 sessões reais: **zero** pares singular/plural.
  * 3. Os únicos nomes terminados em `s` (`steel boots`, `terra legs`,
  *    `silencer claws`, `damaged armor plates`, `oriental shoes`) são itens cujo
  *    nome É plural — e o wiki os indexa assim mesmo (`Steel Boots` → 200).
@@ -41,7 +41,9 @@
  * consulta tenta na ordem. Ambiguidade resolvida por cobertura, não por
  * adivinhação.
  *
- * `scripts/conferir-itens.ts` mede a cobertura contra a API de verdade.
+ * `scripts/conferir-itens.ts` mede a cobertura contra a API de verdade. Em
+ * 2026-09-22: **135 de 135**, zero exceções. Rodar de novo quando aparecer item
+ * novo no banco — é ele que avisa se a convenção do wiki mudou.
  */
 
 /**
