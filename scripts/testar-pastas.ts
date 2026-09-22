@@ -23,7 +23,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { assinarJwt } from "../lib/supabase/bot.ts";
+import { assinarJwt } from "../lib/supabase/jwt.ts";
 import { progressoDaMeta } from "../lib/meta.ts";
 
 function exigir(nome: string): string {

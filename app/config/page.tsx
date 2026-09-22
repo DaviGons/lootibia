@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { usuarioDoEmail } from "@/lib/conta";
 import { Marca } from "@/components/marca";
-import { VinculoDiscord } from "@/app/hunts/formulario";
 import { removerPersonagem } from "@/app/hunts/pastas";
 import { CadastrarPersonagem, PrecoDoMundo } from "./formularios";
 
@@ -197,20 +196,6 @@ async function Conteudo() {
         >
           Trocar a senha
         </Link>
-      </Painel>
-
-      <Painel
-        titulo="Discord"
-        explicacao={
-          <>
-            Liga sua conta ao bot: <code className="rounded bg-muted px-1">/addhunt</code> passa a
-            gravar aqui e <code className="rounded bg-muted px-1">/viewstats</code> lê daqui. O
-            vínculo também entrega ao bot o seu fuso horário — sem ele não dá para saber a que dia
-            de Tibia cada sessão pertence.
-          </>
-        }
-      >
-        <VinculoDiscord />
       </Painel>
     </div>
   );
