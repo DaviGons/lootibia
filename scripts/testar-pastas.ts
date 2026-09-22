@@ -17,9 +17,10 @@
  *
  * ## Como ele vira "um usuário"
  *
- * Assinando um JWT com `sub = usuario_id`, igual ao bot do Discord faz
- * (diretriz 34). Usar a chave secreta seria mais fácil e testaria a coisa
- * errada: ela **ignora a RLS**, e é justamente a RLS que estava quebrada.
+ * Assinando um JWT com `sub = usuario_id`, com o `lib/supabase/jwt.ts` que o
+ * bot aposentado deixou para trás. Usar a chave secreta seria mais fácil e
+ * testaria a coisa errada: ela **ignora a RLS**, e é justamente a RLS que
+ * estava quebrada.
  */
 
 import { createClient } from "@supabase/supabase-js";

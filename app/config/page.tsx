@@ -106,9 +106,9 @@ async function Conteudo() {
         titulo="Personagens"
         explicacao={
           <>
-            Digite o nome e o resto vem da TibiaData — mundo, level e vocação. Serve para o{" "}
-            <code className="rounded bg-muted px-1">/addhunt</code> do bot e para saber em que
-            mundo ler o preço da Tibia Coin.
+            Digite o nome e o resto vem da TibiaData — mundo, level e vocação. É o{" "}
+            <b className="text-foreground">mundo</b> que decide qual preço de Tibia Coin converte
+            as metas das suas pastas.
           </>
         }
       >

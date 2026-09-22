@@ -17,7 +17,7 @@ export interface Resultado {
  * `usuario_personagem` são todas `auth.uid() = usuario_id` (migration 0003).
  * Repetir o `.eq('usuario_id', …)` aqui daria a impressão de que o isolamento
  * depende deste arquivo — e `where` esquecido é bug comum, enquanto política de
- * RLS não se esquece sozinha. É o mesmo raciocínio da diretriz 34.
+ * RLS não se esquece sozinha — diretriz 26.
  *
  * O `usuario_id` aparece só no INSERT, porque a coluna é `not null` e o banco
  * precisa de um valor; o `with check` da política confere que é o seu.

@@ -3,22 +3,24 @@
 </p>
 
 <p align="center">
-  Analisador de hunts do Tibia — pelo site ou por um bot do Discord.<br>
+  Analisador de hunts do Tibia.<br>
   <a href="https://lootibia.vercel.app">lootibia.vercel.app</a>
 </p>
 
 ---
 
 Cole o texto que o Hunt Analyser do Tibia copia. O app parseia, guarda a sessão e mostra os
-acumulados da **semana do jogo** — que não é a semana do calendário: ela vira às 10:00 de Berlim,
-no server save.
+acumulados: profit, loot, supplies, XP e XP Raw, mobs mortos e as hunts mais caçadas.
+
+Quem organiza é a **pasta** — criada e nomeada por você, com **meta opcional em Tibia Coin ou em
+gold**. A meta guarda valor e unidade, nunca o equivalente em gold, porque o preço da TC muda.
 
 Next.js 16 (App Router, Cache Components) · Supabase · Tailwind · Vercel.
 
 > **Projeto pessoal, de uso fechado.** Não há cadastro aberto: as contas são criadas à mão. O
 > código está público, a instância não.
 
-As regras de trabalho estão em **[AGENTS.md](AGENTS.md)** — 40 diretrizes, cada uma com o motivo
+As regras de trabalho estão em **[AGENTS.md](AGENTS.md)** — 43 diretrizes, cada uma com o motivo
 junto. Leia antes de mexer.
 
 ## Duas regras de cálculo que não se negociam
@@ -44,12 +46,19 @@ quebrar.
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. Em *Project Settings → API*, copie a URL e a **chave publicável** para o `.env.local`.
-3. No *SQL Editor*, rode os dois migrations na ordem:
-   [`0001_schema.sql`](supabase/migrations/0001_schema.sql) e
-   [`0002_bot_discord.sql`](supabase/migrations/0002_bot_discord.sql). Eles criam as tabelas, a
-   view de período e **todas as políticas de RLS**.
+3. No *SQL Editor*, rode os migrations **na ordem**:
+   [`0001_schema.sql`](supabase/migrations/0001_schema.sql),
+   [`0002_bot_discord.sql`](supabase/migrations/0002_bot_discord.sql),
+   [`0003_pastas_e_metas.sql`](supabase/migrations/0003_pastas_e_metas.sql) e
+   [`0004_aposenta_bot_discord.sql`](supabase/migrations/0004_aposenta_bot_discord.sql).
+   Eles criam as tabelas, a view de período e **todas as políticas de RLS**.
 4. Em *Authentication → Sign In / Providers*, **desligue "Allow new users to sign up"**. Não é
    detalhe: sem isso o endpoint do GoTrue aceita cadastro de quem souber o caminho, mesmo sem tela.
+
+> O `0002` cria o que o bot do Discord usava e o `0004` derruba de novo. Parece desperdício e não é:
+> migration é histórico, não estado desejado — reescrever o `0002` faria o banco de quem já rodou
+> divergir do de quem rodar amanhã. O bot foi aposentado em 22/09; o porquê está em
+> [`docs/bot-discord.md`](docs/bot-discord.md).
 
 > O plano Free **pausa o projeto após 1 semana de inatividade**.
 
@@ -68,20 +77,19 @@ quem esqueceu a senha; `--listar` mostra quem já trocou.
 
 O modelo completo, com os porquês, está em [`lib/conta.ts`](lib/conta.ts).
 
-### 3. Bot do Discord (opcional)
-
-Montagem passo a passo em [`docs/bot-discord.md`](docs/bot-discord.md). Ele roda como HTTP
-Interactions no **mesmo deploy da Vercel** — não há processo nem host a mais.
-
 ## Estrutura
 
 | Caminho | O que é |
 |---|---|
-| `app/hunts/` | Tela do analisador: importar, listar, apagar, acumulado da semana |
-| `app/api/discord/` | Endpoint de interações do bot (`/cadastro`, `/addhunt`, `/viewstats`) |
+| `app/hunts/` | Tela do analisador: importar, listar, apagar, organizar em pastas |
+| `app/config/` | Personagens, preço da Tibia Coin por mundo, troca de senha |
 | `lib/huntSession.ts` | Parser do texto do Hunt Analyser |
 | `lib/huntAgregado.ts` | Agregação das métricas (`Σ total / Σ horas`) |
+| `lib/importacao.ts` | Uma sessão parseada indo para o banco, sem nenhuma linha de Next |
+| `lib/meta.ts` | Progresso da meta da pasta e conversão TC ↔ gp |
 | `lib/periodo.ts` | Dia e semana do jogo, com o DST de Berlim resolvido |
+| `lib/rashid.ts` | Onde o Rashid está hoje — rotação versionada, respeitando o server save |
+| `lib/tibiadata.ts` | Cliente único da TibiaData: personagem, mundo, boostados do dia |
 | `lib/conta.ts` | Login por usuário, código de ativação, domínio sintético |
 | `lib/sprites.ts` · `lib/dados/` | Sprite de criatura, de um arquivo versionado — sem API na requisição |
 | `lib/marca.ts` · `components/marca.tsx` | A marca, desenhada em vetor (sem fonte) |
@@ -100,14 +108,24 @@ npm run build
 node --experimental-strip-types lib/periodo.test.ts
 node --experimental-strip-types lib/hunt.test.ts
 node --experimental-strip-types lib/sprites.test.ts
-node --experimental-strip-types lib/discord.test.ts
 node --experimental-strip-types lib/marca.test.ts
 node --experimental-strip-types lib/conta.test.ts
+node --experimental-strip-types lib/metaRashid.test.ts
 ```
 
 Os testes não usam framework: rodam com `node --experimental-strip-types` e comparam com
 `JSON.stringify`. Nenhum deles toca a rede — os parsers são testados contra respostas reais
 gravadas em `test/fixtures/` (diretriz 29).
+
+Fora dessa lista, porque precisa de credencial e de rede:
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+```
+
+Ele fala com o banco de verdade, autenticado como um usuário de verdade, e existe por causa de uma
+classe de bug que nenhum teste de unidade pega: **RLS sem política de `update` nega em silêncio, e
+o PostgREST ainda responde `200`** (diretrizes 45 e 46). Rode-o sempre que mexer em política.
 
 ## Créditos
 

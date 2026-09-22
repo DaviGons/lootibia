@@ -6,12 +6,11 @@
  *
  * ## Por que continua em cima do Supabase Auth
  *
- * Toda a RLS do projeto é `auth.uid() = usuario_id`, o bot do Discord assina um
- * JWT com `sub = usuario_id` (diretriz 34) e a sessão do site é o cookie do
- * `@supabase/ssr`. Trocar o Supabase Auth por autenticação própria significaria
- * reescrever as políticas das seis tabelas, o bot e o middleware — para ganhar
- * o quê? O que muda de verdade é só a **credencial**: nome de usuário no lugar
- * de e-mail. Então é só isso que muda.
+ * Toda a RLS do projeto é `auth.uid() = usuario_id` e a sessão do site é o
+ * cookie do `@supabase/ssr`. Trocar o Supabase Auth por autenticação própria
+ * significaria reescrever as políticas de todas as tabelas e o middleware —
+ * para ganhar o quê? O que muda de verdade é só a **credencial**: nome de
+ * usuário no lugar de e-mail. Então é só isso que muda.
  *
  * ## Como o nome de usuário vira e-mail
  *
