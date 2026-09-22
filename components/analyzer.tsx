@@ -132,7 +132,7 @@ function Corpo({ d }: { d: DetalheDaSessao }) {
         <Numero rotulo="Duração" texto={horas(d.duracaoSegundos)} />
       </div>
 
-      <Caixa s={s} titulo="Do loot desta hunt, quanto já é dinheiro" />
+      <Caixa s={s} titulo="De onde vem o profit desta hunt" />
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <Lista
