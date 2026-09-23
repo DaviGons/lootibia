@@ -7,6 +7,8 @@ import { rashidEm } from "@/lib/rashid";
 import { progressoDaMeta, rotuloDaMeta, type UnidadeDaMeta } from "@/lib/meta";
 import { separarLoot, NOMES_DE_MOEDA } from "@/lib/moedas";
 import { Caixa } from "@/components/caixa";
+import { DropsExtras, type DropNaTela } from "@/components/drops-extras";
+import { somarExtras } from "@/lib/extras";
 import { FormularioImportacao } from "./formulario";
 import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
@@ -279,6 +281,31 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
       .in("sessao_id", idsEmEscopo)
       .in("item.nome", NOMES_DE_MOEDA),
   ]);
+
+  // Os extras seguem a MESMA regra de escopo das hunts: a pasta aberta, ou o
+  // balde "Sem pasta", ou tudo. Quem organiza continua sendo a pasta.
+  let consultaExtras = supabase
+    .from("drop_extra")
+    .select("id, valor, unidade, item(nome)")
+    .order("criado_em", { ascending: false });
+  if (selecionada === "sem") consultaExtras = consultaExtras.is("pasta_id", null);
+  else if (pastaAberta !== null) consultaExtras = consultaExtras.eq("pasta_id", pastaAberta);
+  const { data: dadosExtras } = await consultaExtras;
+
+  const drops: DropNaTela[] = (
+    (dadosExtras ?? []) as unknown as {
+      id: number;
+      valor: number;
+      unidade: UnidadeDaMeta;
+      item: { nome: string } | null;
+    }[]
+  ).map((d) => ({
+    id: d.id,
+    item: d.item?.nome ?? "item removido",
+    valor: d.valor,
+    unidade: d.unidade,
+  }));
+  const totalDeExtras = somarExtras(drops, precoTc);
   const detalhes = (dadosDetalhe ?? []) as unknown as LinhaDetalhe[];
   const moedas = (dadosMoedas ?? []) as unknown as { quantidade: number; item: { nome: string } }[];
 
@@ -362,6 +389,13 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
               />
 
               {meta && <Meta meta={meta} progresso={progresso} precoTc={precoTc} />}
+
+              <DropsExtras
+                drops={drops}
+                total={totalDeExtras}
+                pastaId={pastaAberta}
+                precoTc={precoTc}
+              />
 
               <section>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
