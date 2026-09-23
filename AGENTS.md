@@ -344,6 +344,24 @@ só quando alguém clica.
 banco, porque sessão encerrada não muda. Dado imutável é o caso em que guardar no cliente sai de
 graça — não há invalidação para acertar.
 
+**54. `<dialog>` dentro de `<Link>` quebra — e o portal sozinho NÃO conserta.** Em 2026-09-23
+descobriu-se que apagar pasta nunca funcionou. `EditarPasta` é renderizado no slot `acao` de
+`ItemDaLateral`, **dentro do `<Link>` da pasta**: o `<form>` e o `<dialog>` nasciam dentro de um
+`<a href>`. HTML inválido, e pior — clicar em "Apagar pasta" virava navegação. A confirmação
+piscava, porque o estado do React atualizava, e a página ia embora antes de dar para confirmar.
+
+O botão de editar disfarçava com `preventDefault`, remendo por botão; ninguém pôs o mesmo no de
+apagar.
+
+**O conserto precisa das DUAS metades**, e a segunda surpreende: depois de portar o diálogo para o
+`<body>`, o clique **continuava navegando**. Evento do React borbulha pela árvore de
+**componentes**, não pela do DOM — o `<Link>` segue sendo ancestral em React mesmo com o
+`<dialog>` pendurado no body. Daí o `onClick` do diálogo começar com `stopPropagation`.
+
+Regra: **modal nasce por portal no `<body>`, com `stopPropagation` no próprio diálogo.** Uma
+barreira no lugar certo, em vez de um `preventDefault` por botão que alguém vai esquecer no
+próximo.
+
 **29. Testes contra fixtures gravadas, nunca contra a API ao vivo.** Respostas reais em
 `test/fixtures/`, parsers testados contra elas. Um script separado revalida as fixtures contra a
 API de verdade, rodado sob demanda.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Plus } from "lucide-react";
 import { criarPasta, editarPasta, apagarPasta, type Resultado } from "@/app/hunts/pastas";
 import { Button } from "@/components/ui/button";
@@ -16,12 +17,35 @@ export interface PastaEditavel {
 }
 
 /**
- * `<dialog>` nativo, sem biblioteca.
+ * `<dialog>` nativo, sem biblioteca, renderizado por PORTAL no `<body>`.
  *
  * Ele já traz de graça o que um `<div>` com `position:fixed` exigiria escrever
  * à mão: foco preso dentro, Esc fechando, o resto da página marcado como inerte
  * para leitor de tela, e o `::backdrop`. Nada disso é detalhe de acabamento —
  * é o que separa um modal utilizável de um que prende quem navega por teclado.
+ *
+ * ## O portal não é preciosismo: sem ele, apagar pasta NÃO FUNCIONA
+ *
+ * `EditarPasta` é renderizado no slot `acao` de `ItemDaLateral`, que fica
+ * **dentro do `<Link>` da pasta**. Sem portal, este `<dialog>` e o `<form>` que
+ * ele envolve nascem dentro de um `<a href>` — HTML inválido, e pior: todo
+ * clique lá dentro borbulha até a âncora e vira navegação.
+ *
+ * Medido em 2026-09-23: clicar em "Apagar pasta" levava a página para
+ * `/hunts?pasta=N`. A confirmação até aparecia por um instante, porque o estado
+ * do React atualizava — e a navegação acontecia em paralelo, destruindo o
+ * diálogo antes de dar para clicar em "sim, apagar". O sintoma era "clico e ele
+ * sai da pasta sem apagar nada".
+ *
+ * O botão de editar disfarçava o problema com `preventDefault`, um remendo por
+ * botão — e por isso só ele funcionava.
+ *
+ * **O portal sozinho NÃO basta**, e isso também foi medido: depois de portar,
+ * o clique continuava navegando. Evento do React borbulha pela árvore de
+ * COMPONENTES, não pela do DOM — o `<Link>` segue sendo ancestral do
+ * `EditarPasta` em React, mesmo com o `<dialog>` pendurado no `<body>`. Por isso
+ * o `onClick` abaixo começa com `stopPropagation`: uma barreira, no lugar certo,
+ * em vez de um `preventDefault` por botão que alguém vai esquecer no próximo.
  */
 function Modal({
   aberto,
@@ -45,11 +69,24 @@ function Modal({
     if (!aberto && d.open) d.close();
   }, [aberto]);
 
-  return (
+  // `createPortal` precisa do `document`, que não existe no SSR. Esperar a
+  // montagem não custa nada aqui: o diálogo só importa depois de um clique.
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+  if (!montado) return null;
+
+  return createPortal(
     <dialog
       ref={ref}
       onClose={aoFechar}
       onClick={(e) => {
+        // `stopPropagation` PRIMEIRO, e ele é metade do conserto de apagar pasta.
+        //
+        // O portal tira este diálogo de dentro do `<a>` no DOM, mas evento do
+        // React borbulha pela árvore de COMPONENTES, não pela do DOM: sem isto,
+        // o clique continua chegando no `onClick` do `<Link>` que envolve
+        // `EditarPasta`, e a página navega no meio da confirmação. Medido.
+        e.stopPropagation();
         // Clicar fora fecha. O alvo ser o próprio <dialog> significa que o
         // clique caiu no backdrop, não num filho.
         if (e.target === ref.current) aoFechar();
@@ -60,7 +97,8 @@ function Modal({
         <h2 className="mb-4 text-sm font-semibold">{titulo}</h2>
         {children}
       </div>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
 
