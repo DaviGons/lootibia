@@ -51,7 +51,7 @@ export interface ItemDoWiki {
  *
  * Tenta as variantes de `variantesDeTitulo` na ordem, porque a API é sensível a
  * caixa e `Wand Of Inferno` dá 404 enquanto `Wand of Inferno` dá 200. Cobertura
- * medida: 135 de 135 itens do banco (`scripts/conferir-itens.ts`).
+ * medida: 138 de 138 itens do banco (`scripts/conferir-itens.ts`).
  */
 export async function buscarItem(nome: string): Promise<ItemDoWiki | null> {
   const variantes = variantesDeTitulo(nome);
