@@ -32,7 +32,7 @@ Duas regras de cálculo que não se negociam:
 Detalhes do formato, armadilhas e dimensionamento: [docs/hunt-analyser.md](docs/hunt-analyser.md).
 Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 
-**Estado:** app no ar em <https://lootibia.vercel.app>. Os três migrations de
+**Estado:** app no ar em <https://lootibia.vercel.app>. Os quatro migrations de
 `supabase/migrations/` estão **aplicados e verificados** no Supabase — importação, RLS isolando por
 usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de ponta a
 ponta. A tela `/hunts` importa, lista, apaga, organiza em pastas e mostra os acumulados com
@@ -95,6 +95,11 @@ lógica em [lib/extras.ts](lib/extras.ts), nome conferido no wiki por
 [lib/tibiawiki.ts](lib/tibiawiki.ts) antes de virar linha.
 
 **Não entra no profit, e isso é decisão de produto, não limitação** — diretriz 53.
+
+O `0004` foi **aplicado e conferido** em 2026-09-23, pelo MCP do Supabase: quatro políticas na
+`drop_extra`, `update` com `using` **e** `with check`, e `scripts/testar-extras.ts` passando —
+inclusive o caso em que outro usuário recebe "sem erro" num update alheio e o valor **não muda**,
+que é a negação silenciosa da diretriz 45 acontecendo na nossa frente.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -189,7 +194,7 @@ inferir o formato de resposta de terceiro. Esta diz o mesmo sobre o que nós mes
 Aconteceu em 2026-09-22. `docs/hunt-analyser.md` e o `AGENTS.md` afirmavam, havia dias, que o Hunt
 Analyser escreve item no plural (`great mana potions`) e que faltava um de-para para resolver isso.
 **O fixture do próprio repositório desmentia**: `413x a great mana potion` — singular, com artigo,
-na quantidade 413. E os 135 itens de 7 sessões reais não tinham **nenhum** par singular/plural.
+na quantidade 413. E os 138 itens de 9 sessões reais não têm **nenhum** par singular/plural.
 
 O problema real era outro: a API do wiki é sensível a caixa e não usa Title Case inglês
 (`Wand of Inferno` responde 200, `Wand Of Inferno` responde 404).
