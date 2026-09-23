@@ -89,6 +89,13 @@ está na diretriz 49. E cada linha da lista ganhou um botão que abre o **analyz
 números, monstros e itens com quantidade, mais `damage` e `healing` — dois campos que o banco
 guardava desde a primeira importação e que nenhuma tela mostrava.
 
+**Drops extras desde 2026-09-23.** Botão que anota um rare com o valor que o
+**usuário** dá, em TC ou gp. Schema em `supabase/migrations/0004_drops_extras.sql`,
+lógica em [lib/extras.ts](lib/extras.ts), nome conferido no wiki por
+[lib/tibiawiki.ts](lib/tibiawiki.ts) antes de virar linha.
+
+**Não entra no profit, e isso é decisão de produto, não limitação** — diretriz 53.
+
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
 lâmina em `--primary`. Geometria em [lib/marca.ts](lib/marca.ts), componentes em
@@ -122,6 +129,7 @@ node --experimental-strip-types lib/conta.test.ts
 node --experimental-strip-types lib/metaRashid.test.ts
 node --experimental-strip-types lib/moedas.test.ts
 node --experimental-strip-types lib/nomesDeItem.test.ts
+node --experimental-strip-types lib/extras.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
@@ -262,6 +270,19 @@ autenticado poluir os lookups com nomes inventados, e adiava o endurecimento "pa
 usuário além de nós". O caso do `personagem` foi fechado por outro caminho, sem `security definer`:
 tirando o texto livre, ninguém mais inventa nome. `monstro`, `item` e `spot` continuam abertos, e
 continuam sendo risco aceito — só que agora consta aqui, e não só dentro do SQL.
+
+**53. Número medido e número estimado não somam no mesmo total.** Todo número da tela sai do
+texto que o jogador colou e pode ser conferido contra ele. Os **drops extras** são a exceção: o
+valor é palpite do usuário sobre quanto um rare vale de verdade — útil justamente porque o `Loot`
+avalia item por referência de NPC e erra feio aí.
+
+Por isso eles somam **à parte**, e o painel diz "não entram no profit" na cara. Jogar os dois num
+total só tornaria o profit inauditável contra o texto de origem, e seria impossível saber, meses
+depois, quanto daquele número foi medição e quanto foi chute.
+
+Consequência prática: extra em TC **sem preço configurado** não vale zero, vale
+**desconhecido**. `somarExtras` conta esses à parte em `semPreco` e a tela mostra quantos ficaram
+de fora — total que esconde parcela é pior que total nenhum.
 
 **24. Preço de Market não existe em nenhuma das duas APIs** — só `npcvalue`/`value` do wiki, que é
 referência de NPC. Não inventar número e apresentar como preço.
