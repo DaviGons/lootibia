@@ -32,12 +32,11 @@ Duas regras de cálculo que não se negociam:
 Detalhes do formato, armadilhas e dimensionamento: [docs/hunt-analyser.md](docs/hunt-analyser.md).
 Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 
-**Estado:** app no ar em <https://lootibia.vercel.app>. Os migrations `0001` a `0004` de
+**Estado:** app no ar em <https://lootibia.vercel.app>. Os seis migrations de
 `supabase/migrations/` estão **aplicados e verificados** no Supabase — importação, RLS isolando por
 usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de ponta a
-ponta. O `0005` e o `0006` foram escritos em 2026-09-27 e **ainda não estão aplicados**; a ordem
-importa e está em "Endurecimento de segurança", abaixo. A tela `/hunts` importa, lista, apaga,
-organiza em pastas e mostra os acumulados com sprites.
+ponta, e o `0005` e o `0006` entraram em 2026-09-28 (ver "Endurecimento de segurança", abaixo). A
+tela `/hunts` importa, lista, apaga, organiza em pastas e mostra os acumulados com sprites.
 
 **Houve uma integração externa, e ela foi removida por completo em 2026-09-22** — código, schema,
 documentação e branches. **Não é para ressuscitá-la.** Uma ponta solta apareceu cinco dias depois,
@@ -123,16 +122,23 @@ que mudou:
 
 As migrations foram testadas antes de chegar perto de produção: aplicadas num Postgres local
 (PGlite) sobre um banco com dados parecidos com os reais, reaplicadas, e montadas do zero, com cada
-regra exercitada como usuário. **A ordem de aplicação é a que não quebra o site no meio**:
+regra exercitada como usuário. Em 2026-09-28 entraram em produção pelo MCP do Supabase, **na ordem
+que não quebra o site no meio** — `0005`, depois o deploy do `642199b`, depois o `0006` —, e
+cada passo foi conferido no banco real antes do seguinte:
 
-1. aplicar o `0005` — ele é compatível com o código que está no ar;
-2. fazer o deploy;
-3. aplicar o `0006`, que tira as colunas antigas de `personagem`;
-4. rodar `scripts/testar-pastas.ts` e `scripts/testar-extras.ts`.
+- sequências dos lookups em `integer`, com a posição preservada (`item_id_seq` seguiu em 1.179);
+- nenhum grant para `anon`, nenhum `truncate` para `authenticated`, nenhuma tabela sem RLS;
+- os dois gatilhos e os seis tetos de tamanho no lugar;
+- os 3 vínculos com mundo, vocação e level copiados, e `personagem` só com `id` e `nome`;
+- no site novo, os headers de segurança saindo e `/auth/error` respondendo 404.
 
-E quatro coisas que só se fazem no painel: tirar da Vercel as variáveis que o código não lê
-(diretriz 39); desligar as chaves de API legadas do Supabase; revogar o segredo JWT legado; e pôr
-o tamanho mínimo de senha no Auth, porque o `MIN_SENHA` do código só é conferido no navegador.
+**Pendente, e é do Davi:**
+
+- rodar `scripts/testar-pastas.ts` e `scripts/testar-extras.ts` — precisam da chave secreta, que
+  só existe no `.env.local` da máquina dele;
+- no painel da Vercel, apagar as variáveis que o código não lê (diretriz 39);
+- no painel do Supabase, desligar as chaves de API legadas, revogar o segredo JWT legado e pôr o
+  tamanho mínimo de senha no Auth, porque o `MIN_SENHA` do código só é conferido no navegador.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -519,7 +525,9 @@ vercel env ls production
 
 Tem de sair só as duas `NEXT_PUBLIC_*`. E integração que sincroniza variável volta a injetá-las
 se alguém clicar em "resync": depois de apagar, desligar a sincronização. **Remoção ainda pendente
-em 2026-09-27** — atualizar esta linha quando for feita.
+em 2026-09-28**, e é pelo painel: o MCP da Vercel não tem como apagar variável, e o filtro de
+permissões do Claude Code barra escrita em cofre de segredos mesmo com autorização dada no chat.
+Atualizar esta linha quando for feita.
 
 **40. `senha_definida` é porteiro de fluxo, não fronteira de segurança.** A flag vive em
 `user_metadata`, que o próprio dono consegue gravar — quem quiser vira a flag sem trocar a senha.
