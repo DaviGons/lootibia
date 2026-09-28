@@ -114,6 +114,12 @@ export function Lateral({
           </span>
         )}
         <Link
+          href="/ferramentas"
+          className="rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          Ferramentas
+        </Link>
+        <Link
           href="/config"
           className="rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >

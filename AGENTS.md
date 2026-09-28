@@ -51,6 +51,8 @@ aplicadas em produção (a `0005` e a `0006` em 2026-09-28).
   ficam em `usuario_personagem`.
 - **Drops extras:** rare anotado com o valor que o usuário dá, somado à parte do profit
   ([lib/extras.ts](lib/extras.ts)).
+- **Ferramentas:** `/ferramentas` reúne as ferramentas. A primeira é `/ferramentas/level`, que prevê
+  quando o char chega a um level pelo XP/h real das hunts dele ([lib/level.ts](lib/level.ts)).
 - **Dia do jogo:** [lib/periodo.ts](lib/periodo.ts) sabe a que dia de Tibia um instante pertence (o
   dia vira no server save, 10:00 de Berlim). A rotação do Rashid ([lib/rashid.ts](lib/rashid.ts))
   depende dele.
@@ -94,6 +96,7 @@ node --experimental-strip-types lib/metaRashid.test.ts
 node --experimental-strip-types lib/moedas.test.ts
 node --experimental-strip-types lib/nomesDeItem.test.ts
 node --experimental-strip-types lib/extras.test.ts
+node --experimental-strip-types lib/level.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.

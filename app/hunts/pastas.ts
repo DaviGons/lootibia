@@ -294,6 +294,8 @@ export async function cadastrarPersonagem(
 
   revalidatePath("/hunts");
   revalidatePath("/config");
+  // A previsão de level usa este mesmo cadastro para atualizar o level.
+  revalidatePath("/ferramentas/level");
   return {
     ok: true,
     mensagem: `${achado.nome} — ${achado.vocacao} level ${achado.nivel}, em ${achado.mundo}.`,
