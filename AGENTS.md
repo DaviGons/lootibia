@@ -46,7 +46,7 @@ aplicadas em produção (a `0005` e a `0006` em 2026-09-28).
   primeiro acesso. Modelo em [lib/conta.ts](lib/conta.ts).
 - **Lateral:** mora no layout de `app/(app)/` (grupo de rotas, fora da URL) e aparece em toda
   página logada, em três grupos recolhíveis: **Analyzers** (todas as hunts, pastas, adicionar nova
-  hunt), **Ferramentas** (Stash analyzer, anunciado como "em breve") e **Calculadoras**
+  hunt), **Ferramentas** (Stash analyzer) e **Calculadoras**
   ([components/lateral.tsx](components/lateral.tsx)).
 - **Hunts:** `/hunts` lista, apaga, organiza em pastas com meta opcional em TC ou gp
   ([lib/meta.ts](lib/meta.ts)) e mostra os acumulados com sprites de criatura. Cada sessão abre um
@@ -56,6 +56,18 @@ aplicadas em produção (a `0005` e a `0006` em 2026-09-28).
   ficam em `usuario_personagem`.
 - **Drops extras:** rare anotado com o valor que o usuário dá, somado à parte do profit
   ([lib/extras.ts](lib/extras.ts)).
+- **Stash analyzer:** `/ferramentas/stash` lê prints do Supply Stash no navegador — o print não
+  sai da máquina — e diz o que serve para Delivery Task (com o mínimo e o máximo que a task pede),
+  para imbuement e quanto vale no NPC. Motor em [lib/stash.ts](lib/stash.ts), geometria e fonte
+  medidas em `test/fixtures/stash/`. Base e atlas gerados por
+  `node --experimental-strip-types scripts/atualizar-stash.ts`, que lê os sprites do **cliente do
+  Tibia instalado** (precisa do `xz`) e os dados do TibiaWiki: os CDNs de imagem dos dois wikis
+  barram script com a Cloudflare. Ler os arquivos do cliente pode esbarrar no contrato de serviço
+  da CipSoft; foi decisão do Davi em 2026-09-28. A janela é achada pelo título "Stash" em qualquer
+  posição e tamanho de tela, a 100% ou 200% (ampliação sem suavizar); a altura da lista é medida no
+  print; linha cortada pela rolagem é lida pela parte à vista (60% do sprite) e a quantidade, só
+  com o número inteiro. Limites: escala fracionária (125%, 150%) e print comprimido (JPEG) não são
+  lidos, e os dígitos 7 e 8 ainda não foram vistos num print (viram "?").
 - **Calculadoras:** `/calculadoras/level` prevê quando o char chega a um level pelo XP/h real das
   hunts dele ([lib/level.ts](lib/level.ts)). Nasceu em `/ferramentas/level`, que redireciona.
 - **Dia do jogo:** [lib/periodo.ts](lib/periodo.ts) sabe a que dia de Tibia um instante pertence (o
@@ -102,6 +114,7 @@ node --experimental-strip-types lib/moedas.test.ts
 node --experimental-strip-types lib/nomesDeItem.test.ts
 node --experimental-strip-types lib/extras.test.ts
 node --experimental-strip-types lib/level.test.ts
+node --experimental-strip-types lib/stash.test.ts
 ```
 
 Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
