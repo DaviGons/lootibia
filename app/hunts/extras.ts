@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buscarItem, ErroDaTibiaWiki } from "@/lib/tibiawiki";
 import { tituloDeItem } from "@/lib/nomesDeItem";
+import { idsPorNome } from "@/lib/importacao";
+import { pastaEhMinha } from "@/lib/posse";
 import type { UnidadeDaMeta } from "@/lib/meta";
 import type { Resultado } from "./pastas";
 
@@ -33,6 +35,12 @@ async function usuarioAtual() {
   return { supabase, usuario: data.user };
 }
 
+/** Igual ao `maxLength` do formulário. Conferido aqui porque o cliente pode mandar qualquer coisa. */
+const LIMITE_NOME_ITEM = 80;
+
+/** Teto de `drop_extra.valor`, que é `integer`: 2,1 bilhões de gp ou de TC. */
+const VALOR_MAXIMO = 2_147_483_647;
+
 /** Aceita "30.000.000", "30000000" e "30 000 000". Recusa o resto. */
 function lerValor(bruto: string): number | null {
   const limpo = bruto.replace(/[.\s]/g, "").replace(",", ".");
@@ -52,7 +60,11 @@ export async function adicionarDropExtra(
   const pastaId = pastaBruta === "" ? null : Number(pastaBruta);
 
   if (!nome) return { ok: false, mensagem: "Diga qual item caiu." };
+  if (nome.length > LIMITE_NOME_ITEM) {
+    return { ok: false, mensagem: `O nome passa de ${LIMITE_NOME_ITEM} caracteres.` };
+  }
   if (valor === null) return { ok: false, mensagem: "O valor precisa ser um número maior que zero." };
+  if (valor > VALOR_MAXIMO) return { ok: false, mensagem: "Valor grande demais." };
   if (unidade !== "tc" && unidade !== "gp") return { ok: false, mensagem: "Unidade inválida." };
   if (pastaId !== null && !Number.isInteger(pastaId)) {
     return { ok: false, mensagem: "Pasta inválida." };
@@ -60,6 +72,9 @@ export async function adicionarDropExtra(
 
   const { supabase, usuario } = await usuarioAtual();
   if (!usuario) return { ok: false, mensagem: "Faça login para anotar um drop." };
+  if (pastaId !== null && !(await pastaEhMinha(supabase, pastaId))) {
+    return { ok: false, mensagem: "Pasta inválida." };
+  }
 
   // 1. O wiki conhece esse item? "Não existe" e "API fora do ar" são coisas
   //    diferentes, e o usuário precisa saber qual das duas aconteceu.
@@ -82,25 +97,23 @@ export async function adicionarDropExtra(
   // 2. O lookup guarda o nome como o parser do Hunt Analyser guardaria:
   //    minúsculo. Assim um rare anotado à mão e o mesmo item vindo de uma
   //    importação são A MESMA linha, e não duas.
+  //    `idsPorNome` lê antes de inserir: item que já existe não gasta id da
+  //    sequência (diretriz 56).
   const canonico = achado.titulo.toLowerCase();
-  const { error: erroItem } = await supabase
-    .from("item")
-    .upsert({ nome: canonico }, { onConflict: "nome", ignoreDuplicates: true });
-  if (erroItem) return { ok: false, mensagem: `Não deu para gravar o item: ${erroItem.message}` };
-
-  const { data: linha, error: erroLer } = await supabase
-    .from("item")
-    .select("id")
-    .eq("nome", canonico)
-    .single();
-  if (erroLer || !linha) return { ok: false, mensagem: "Não deu para encontrar o item gravado." };
+  let itemId: number | undefined;
+  try {
+    itemId = (await idsPorNome(supabase, "item", [canonico])).get(canonico);
+  } catch (e) {
+    return { ok: false, mensagem: `Não deu para gravar o item: ${(e as Error).message}` };
+  }
+  if (itemId === undefined) return { ok: false, mensagem: "Não deu para encontrar o item gravado." };
 
   // 3. O extra em si. `usuario_id` vai no insert porque a coluna é `not null`;
   //    quem confere que é o seu é o `with check` da política.
   const { error } = await supabase.from("drop_extra").insert({
     usuario_id: usuario.id,
     pasta_id: pastaId,
-    item_id: linha.id,
+    item_id: itemId,
     valor,
     unidade,
   });

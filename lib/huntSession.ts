@@ -94,6 +94,28 @@ export function numeroTibia(bruto: string): number {
   return Number(limpo);
 }
 
+/**
+ * Teto do texto colado. Uma sessão real tem 1 a 2 KB (a medida em 22/09, com
+ * 38 itens, tinha 1,5 KB); 64 KB cobre uma hunt enorme com folga e impede que
+ * o parser gaste tempo com o que claramente não é um Hunt Analyser.
+ */
+export const MAX_TEXTO = 64 * 1024;
+
+/** Data e hora como o jogo escreve: '2026-09-15, 19:34:12'. */
+const DATA_HORA = String.raw`\d{4}-\d{2}-\d{2},\s*\d{2}:\d{2}:\d{2}`;
+
+/**
+ * `From <data> to <data>`, com o formato da data FIXO.
+ *
+ * A versão anterior era `^From\s+(.+?)\s+to\s+(.+)$`, e aquilo era
+ * backtracking CÚBICO: `.+?` e os dois `\s+` disputavam os mesmos espaços.
+ * Medido em 2026-09-27 com `From` seguido de espaços: 2 mil, 0,9 s; 4 mil,
+ * 6,7 s; 8 mil, 50 s. Oito KB colados no formulário travavam a função até o
+ * timeout. Sem ambiguidade sobre onde cada pedaço termina, 1 milhão de espaços
+ * leva 2,4 ms.
+ */
+const INTERVALO = new RegExp(String.raw`^From\s+(${DATA_HORA})\s+to\s+(${DATA_HORA})$`, "i");
+
 /** Converte '2026-09-15, 19:34:12' no relógio local ISO, sem fuso. */
 function relogioLocal(bruto: string): RelogioLocal {
   const m = /^(\d{4}-\d{2}-\d{2}),\s*(\d{2}:\d{2}:\d{2})$/.exec(bruto.trim());
@@ -112,21 +134,32 @@ function segundosEntre(inicio: RelogioLocal, fim: RelogioLocal): number {
 }
 
 /**
- * Normaliza nome vindo do jogo para casar com título de página do wiki.
- * Remove o artigo inicial e espaços duplicados. NÃO resolve plural: '413x great
- * mana potions' continua no plural, e o de-para com o wiki é tabela à parte
+ * Normaliza nome vindo do jogo: remove o artigo inicial e espaços duplicados.
+ * O jogo já escreve no singular ('413x a great mana potion'), então não há
+ * plural a desfazer (diretriz 52). O que falta para casar com o wiki é a caixa
+ * do título, e isso é de lib/nomesDeItem.ts e lib/nomesDeCriatura.ts
  * (diretriz 23).
  */
 export function normalizarNome(bruto: string): string {
   return bruto.trim().replace(/^(an?)\s+/i, "").replace(/\s+/g, " ");
 }
 
+/**
+ * Teto de um nome de monstro ou item, igual ao `check` das tabelas de lookup
+ * (migration 0005). O maior nome gravado em 2026-09-27 tinha 27 caracteres.
+ */
+export const MAX_NOME = 100;
+
 function lerContagens(linhas: string[]): ContagemNomeada[] {
   const saida: ContagemNomeada[] = [];
   for (const linha of linhas) {
     const m = /^([\d,]+)x\s+(.+)$/.exec(linha.trim());
     if (!m) throw new ErroDeParse(`Linha de contagem inválida: ${linha}`);
-    saida.push({ nome: normalizarNome(m[2]), quantidade: numeroTibia(m[1]) });
+    const nome = normalizarNome(m[2]);
+    if (nome.length > MAX_NOME) {
+      throw new ErroDeParse(`Nome com mais de ${MAX_NOME} caracteres: ${nome.slice(0, 40)}…`);
+    }
+    saida.push({ nome, quantidade: numeroTibia(m[1]) });
   }
   return saida;
 }
@@ -143,6 +176,12 @@ function duracaoExibida(bruto: string): number | null {
  * @throws {ErroDeParse} se faltar o cabeçalho de sessão ou algum total.
  */
 export function lerSessaoHunt(texto: string): SessaoHunt {
+  if (texto.length > MAX_TEXTO) {
+    throw new ErroDeParse(
+      `Texto grande demais (${Math.round(texto.length / 1024)} KB). O Hunt Analyser copia poucos KB — cole só uma sessão.`,
+    );
+  }
+
   const linhas = texto
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -183,7 +222,7 @@ export function lerSessaoHunt(texto: string): SessaoHunt {
     secao = "nenhuma";
 
     if (/^Session data$/i.test(rotulo)) {
-      const intervalo = /^From\s+(.+?)\s+to\s+(.+)$/i.exec(valor);
+      const intervalo = INTERVALO.exec(valor);
       if (!intervalo) throw new ErroDeParse(`Intervalo de sessão inválido: ${valor}`);
       inicio = relogioLocal(intervalo[1]);
       fim = relogioLocal(intervalo[2]);

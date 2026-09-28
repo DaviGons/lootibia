@@ -60,6 +60,13 @@ export function DefinirSenhaForm({
       // vários F5.
       await supabase.auth.refreshSession();
 
+      // Derruba as OUTRAS sessões desta conta. No primeiro acesso isso é o que
+      // importa: se alguém usou o código de ativação antes do dono, a senha
+      // nova tira essa pessoa daqui — sem isto, ela continuaria logada com o
+      // token que já tinha. Falhar aqui não desfaz a troca, então não trava.
+      const { error: erroOutras } = await supabase.auth.signOut({ scope: "others" });
+      if (erroOutras) console.error("[senha] não derrubei as outras sessões:", erroOutras.message);
+
       // Navegação DURA, e não `router.push`. O `<Link href="/hunts">` da marca
       // faz o Next pré-buscar `/hunts` enquanto a sessão ainda é a antiga, e
       // `push` serve essa cópia do Router Cache sem passar pelo middleware com

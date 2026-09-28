@@ -4,6 +4,7 @@
  *   node --experimental-strip-types --env-file=.env.local scripts/criar-usuario.ts pedro
  *   node --experimental-strip-types --env-file=.env.local scripts/criar-usuario.ts pedro --resetar
  *   node --experimental-strip-types --env-file=.env.local scripts/criar-usuario.ts --listar
+ *   node --experimental-strip-types --env-file=.env.local scripts/criar-usuario.ts --expirar [dias]
  *
  * Não existe cadastro no site: este script é a única porta de entrada. O
  * modelo inteiro está explicado em `lib/conta.ts`; o resumo é que o código
@@ -18,10 +19,30 @@
  * um `updateUser`, os dois com a chave publicável. Se um dia alguém puser a
  * secreta nas variáveis da Vercel, terá aumentado a superfície de ataque sem
  * ganhar recurso nenhum.
+ *
+ * ## O código de ativação vence
+ *
+ * O código é a senha da conta até o dono trocar, e ia por mensagem. Antes de
+ * 2026-09-27 ele valia para sempre: conta criada e nunca acessada era uma
+ * senha de ~49 bits esquecida num histórico de chat. Agora a data em que o
+ * código saiu fica em `app_metadata.codigo_emitido_em` — `app_metadata`, e não
+ * `user_metadata`, porque o usuário não consegue gravar ali —, e `--expirar`
+ * troca a senha de quem ainda está no código há mais de N dias (7 por padrão)
+ * por uma aleatória que ninguém conhece. O código velho para de funcionar, e
+ * `--resetar` sorteia outro quando a pessoa aparecer.
+ *
+ * Não roda sozinho: não há cron na Vercel com a chave secreta, de propósito.
+ * `--listar` mostra há quantos dias cada código está parado.
  */
 
 import { createClient } from "@supabase/supabase-js";
 import { emailDoUsuario, gerarCodigo, normalizarUsuario, usuarioDoEmail } from "../lib/conta.ts";
+import { PREFIXO_DE_TESTE } from "./usuarios-de-teste.ts";
+
+/** Dias até `--expirar` derrubar um código de ativação não usado. */
+const VALIDADE_PADRAO_DIAS = 7;
+
+const MS_POR_DIA = 86_400_000;
 
 function exigir(nome: string): string {
   const v = process.env[nome];
@@ -56,6 +77,14 @@ async function acharPorEmail(email: string) {
   return contas.find((c) => c.email?.toLowerCase() === email) ?? null;
 }
 
+/** Quando o código atual saiu. Conta de antes desta regra cai na data de criação. */
+function codigoEmitidoEm(conta: { app_metadata?: Record<string, unknown>; created_at: string }): Date {
+  const gravado = conta.app_metadata?.codigo_emitido_em;
+  return new Date(typeof gravado === "string" ? gravado : conta.created_at);
+}
+
+const diasDesde = (d: Date) => Math.floor((Date.now() - d.getTime()) / MS_POR_DIA);
+
 function entregar(usuario: string, codigo: string, novo: boolean) {
   console.log("");
   console.log(`  ${novo ? "Conta criada" : "Código novo"}`);
@@ -77,14 +106,46 @@ async function main() {
     for (const c of contas) {
       const nome = usuarioDoEmail(c.email) ?? `(fora do padrão: ${c.email})`;
       const trocou = c.user_metadata?.senha_definida === true;
-      console.log(`  ${nome.padEnd(22)} ${trocou ? "senha própria" : "AINDA NO CÓDIGO"}`);
+      const parado = diasDesde(codigoEmitidoEm(c));
+      console.log(
+        `  ${nome.padEnd(22)} ${trocou ? "senha própria" : `AINDA NO CÓDIGO, há ${parado} dia(s)`}`,
+      );
     }
+    return;
+  }
+
+  if (args.includes("--expirar")) {
+    const argDias = args[args.indexOf("--expirar") + 1];
+    const dias = argDias && !argDias.startsWith("--") ? Number(argDias) : VALIDADE_PADRAO_DIAS;
+    if (!Number.isInteger(dias) || dias < 1) {
+      console.error("Uso: --expirar [dias], com dias inteiro a partir de 1.");
+      process.exit(1);
+    }
+    const vencidas = (await todosOsUsuarios()).filter(
+      (c) => c.user_metadata?.senha_definida !== true && diasDesde(codigoEmitidoEm(c)) >= dias,
+    );
+    for (const c of vencidas) {
+      // Senha aleatória que ninguém recebe: o código velho para de valer, e a
+      // conta continua no estado de primeiro acesso para o `--resetar`.
+      const { error } = await admin.auth.admin.updateUserById(c.id, {
+        password: gerarCodigo(6, 4),
+        app_metadata: { ...c.app_metadata, codigo_expirado_em: new Date().toISOString() },
+      });
+      if (error) throw new Error(`${c.email}: ${error.message}`);
+      console.log(`  código de ${usuarioDoEmail(c.email) ?? c.email} expirado`);
+    }
+    console.log(
+      vencidas.length === 0
+        ? `Nenhum código parado há ${dias} dia(s) ou mais.`
+        : `
+${vencidas.length} código(s) expirado(s). Para reativar alguém: --resetar <nome>.`,
+    );
     return;
   }
 
   const bruto = args.find((a) => !a.startsWith("--"));
   if (!bruto) {
-    console.error("Uso: criar-usuario.ts <nome> [--resetar] | --listar");
+    console.error("Uso: criar-usuario.ts <nome> [--resetar] | --listar | --expirar [dias]");
     process.exit(1);
   }
 
@@ -97,6 +158,12 @@ async function main() {
     process.exit(1);
   }
   if (usuario !== bruto) console.log(`(normalizado para "${usuario}")`);
+  if (usuario.startsWith(PREFIXO_DE_TESTE)) {
+    // Os testes contra o banco apagam as contas com este prefixo que sobrarem
+    // de uma rodada anterior (`scripts/usuarios-de-teste.ts`).
+    console.error(`"${PREFIXO_DE_TESTE}" é reservado para as contas descartáveis dos testes.`);
+    process.exit(1);
+  }
 
   const email = emailDoUsuario(usuario);
   const existente = await acharPorEmail(email);
@@ -117,6 +184,7 @@ async function main() {
     const { error } = await admin.auth.admin.updateUserById(existente.id, {
       password: codigo,
       user_metadata: { ...existente.user_metadata, senha_definida: false },
+      app_metadata: { ...existente.app_metadata, codigo_emitido_em: new Date().toISOString() },
     });
     if (error) throw new Error(error.message);
     entregar(usuario, codigo, false);
@@ -136,6 +204,7 @@ async function main() {
     // definição da RFC 6761, não existe.
     email_confirm: true,
     user_metadata: { senha_definida: false },
+    app_metadata: { codigo_emitido_em: new Date().toISOString() },
   });
   if (error) throw new Error(error.message);
   entregar(usuario, codigo, true);

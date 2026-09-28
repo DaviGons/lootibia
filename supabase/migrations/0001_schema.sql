@@ -30,8 +30,9 @@
 -- Lookups
 -- ---------------------------------------------------------------------------
 
--- Nomes como o JOGO escreve (minúsculo, às vezes plural). O de-para com os
--- títulos do TibiaWiki é problema à parte e ainda não existe (diretriz 23).
+-- Nomes como o JOGO escreve: minúsculo, singular, sem artigo. O de-para com os
+-- títulos do wiki e da TibiaData mora em lib/nomesDeItem.ts e
+-- lib/nomesDeCriatura.ts, não aqui (diretrizes 23 e 52).
 create table if not exists public.monstro (
   id   smallint primary key generated always as identity,
   nome text     not null unique

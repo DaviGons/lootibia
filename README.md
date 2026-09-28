@@ -20,8 +20,8 @@ Next.js 16 (App Router, Cache Components) · Supabase · Tailwind · Vercel.
 > **Projeto pessoal, de uso fechado.** Não há cadastro aberto: as contas são criadas à mão. O
 > código está público, a instância não.
 
-As regras de trabalho estão em **[AGENTS.md](AGENTS.md)** — 43 diretrizes, cada uma com o motivo
-junto. Leia antes de mexer.
+As regras de trabalho estão em **[AGENTS.md](AGENTS.md)** — diretrizes numeradas, cada uma com o
+motivo junto. Leia antes de mexer.
 
 ## Duas regras de cálculo que não se negociam
 
@@ -46,14 +46,24 @@ quebrar.
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. Em *Project Settings → API*, copie a URL e a **chave publicável** para o `.env.local`.
-3. No *SQL Editor*, rode os quatro migrations **na ordem**:
+3. No *SQL Editor*, rode os seis migrations **na ordem**:
    [`0001_schema.sql`](supabase/migrations/0001_schema.sql),
    [`0002_personagem_e_perfil.sql`](supabase/migrations/0002_personagem_e_perfil.sql),
-   [`0003_pastas_e_metas.sql`](supabase/migrations/0003_pastas_e_metas.sql) e
-   [`0004_drops_extras.sql`](supabase/migrations/0004_drops_extras.sql).
+   [`0003_pastas_e_metas.sql`](supabase/migrations/0003_pastas_e_metas.sql),
+   [`0004_drops_extras.sql`](supabase/migrations/0004_drops_extras.sql),
+   [`0005_endurecimento.sql`](supabase/migrations/0005_endurecimento.sql) e
+   [`0006_personagem_so_nome.sql`](supabase/migrations/0006_personagem_so_nome.sql).
    Eles criam as tabelas, a view de período e **todas as políticas de RLS**.
+
+   Num banco que **já roda o site**, o `0006` só entra **depois do deploy** do código que o
+   acompanha: `0005` → deploy → `0006`. O porquê está no cabeçalho de cada arquivo.
 4. Em *Authentication → Sign In / Providers*, **desligue "Allow new users to sign up"**. Não é
    detalhe: sem isso o endpoint do GoTrue aceita cadastro de quem souber o caminho, mesmo sem tela.
+5. Ainda em *Authentication*, ponha o **tamanho mínimo de senha em 8**. O `MIN_SENHA` do código só
+   é conferido no navegador; quem chama a API direto passa por fora dele.
+6. Em *Project Settings → API Keys*, use a chave publicável (`sb_publishable_…`) e a secreta
+   (`sb_secret_…`), e **desligue as chaves legadas** baseadas em JWT. Nada aqui usa o segredo JWT
+   legado.
 
 > O plano Free **pausa o projeto após 1 semana de inatividade**.
 
@@ -115,15 +125,18 @@ Os testes não usam framework: rodam com `node --experimental-strip-types` e com
 `JSON.stringify`. Nenhum deles toca a rede — os parsers são testados contra respostas reais
 gravadas em `test/fixtures/` (diretriz 29).
 
-Fora dessa lista, porque precisa de credencial e de rede:
+Fora dessa lista, porque precisam de credencial e de rede:
 
 ```bash
 node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+node --experimental-strip-types --env-file=.env.local scripts/testar-extras.ts
 ```
 
-Ele fala com o banco de verdade, autenticado como um usuário de verdade, e existe por causa de uma
-classe de bug que nenhum teste de unidade pega: **RLS sem política de `update` nega em silêncio, e
-o PostgREST ainda responde `200`** (diretrizes 45 e 46). Rode-o sempre que mexer em política.
+Eles falam com o banco de verdade e existem por causa de uma classe de bug que nenhum teste de
+unidade pega: **RLS sem política de `update` nega em silêncio, e o PostgREST ainda responde
+`200`** (diretrizes 45 e 46). Cada um cria duas contas descartáveis, entra nelas pela chave
+publicável — a RLS valendo, como na tela — e apaga as duas no fim; nenhum dado de quem usa o site é
+tocado. Rode-os sempre que mexer em política.
 
 ## Créditos
 

@@ -1,7 +1,7 @@
 /**
  * Ver docs/periodos.md. A mesma regra está replicada em SQL na view
- * `sessao_periodo` de supabase/migrations/0001_schema.sql — se mudar aqui,
- * mudar lá.
+ * `sessao_periodo`, cuja versão em vigor é a recriada em
+ * supabase/migrations/0003_pastas_e_metas.sql — se mudar aqui, mudar lá.
  *
  * Calendário do jogo: converte instantes em "dia de Tibia" e agrupa dias em
  * semanas, para que dados coletados em momentos diferentes possam ser

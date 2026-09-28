@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { lerSessaoHunt, ErroDeParse, normalizarNome, numeroTibia } from "./huntSession.ts";
+import { lerSessaoHunt, ErroDeParse, MAX_TEXTO, normalizarNome, numeroTibia } from "./huntSession.ts";
 import { resumirHunts, resumirPorPeriodo, type SessaoRotulada } from "./huntAgregado.ts";
 
 let falhas = 0;
@@ -98,6 +98,35 @@ ok("campo desconhecido nao quebra", comCampoNovo.camposIgnorados["Preys Active"]
 ok("e nao entra nos totais", comCampoNovo.xpGain, 10577467);
 const semBalance = lerSessaoHunt(EXEMPLO.replace("Balance: 2,146,646\n", ""));
 ok("balance ausente e derivado", semBalance.balance, 2146646);
+
+console.log("\n== entrada hostil nao trava o parser");
+// 2026-09-27: o regex antigo de 'Session data' era cubico. 3 mil espacos
+// levavam 2,8 s; 8 mil, 50 s. Com 3 mil aqui, uma regressao falha em
+// segundos em vez de pendurar o teste.
+function lancaRapido(nome: string, fn: () => unknown, tetoMs = 100) {
+  const t0 = performance.now();
+  let lancou = false;
+  try {
+    fn();
+  } catch (e) {
+    lancou = e instanceof ErroDeParse;
+  }
+  const ms = performance.now() - t0;
+  const passou = lancou && ms < tetoMs;
+  if (!passou) falhas++;
+  console.log(`${passou ? "ok  " : "FALHA"} ${nome}  ->  ${lancou ? "recusou" : "NAO recusou"} em ${ms.toFixed(1)} ms`);
+}
+lancaRapido("From seguido de 3 mil espacos", () =>
+  lerSessaoHunt(`Session data: From${" ".repeat(3000)}x`),
+);
+lancaRapido("linha de 60 mil caracteres sem dois-pontos", () => lerSessaoHunt("a".repeat(60_000)));
+lancaRapido("contagem de 60 mil digitos sem o 'x'", () =>
+  lerSessaoHunt(`Looted Items:\n${"1".repeat(60_000)}`),
+);
+lancaRapido("texto acima do teto e recusado antes de qualquer regex", () =>
+  lerSessaoHunt("x".repeat(MAX_TEXTO + 1)),
+);
+ok("o exemplo real cabe no teto com folga", EXEMPLO.length < MAX_TEXTO / 20, true);
 
 console.log("\n== fixture real do jogo (linhas de contagem indentadas)");
 // O cliente indenta as linhas de 'Killed Monsters' e 'Looted Items'. Fixture

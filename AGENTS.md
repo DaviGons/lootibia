@@ -32,19 +32,23 @@ Duas regras de cálculo que não se negociam:
 Detalhes do formato, armadilhas e dimensionamento: [docs/hunt-analyser.md](docs/hunt-analyser.md).
 Agrupamento por dia e semana do jogo: [docs/periodos.md](docs/periodos.md).
 
-**Estado:** app no ar em <https://lootibia.vercel.app>. Os quatro migrations de
+**Estado:** app no ar em <https://lootibia.vercel.app>. Os migrations `0001` a `0004` de
 `supabase/migrations/` estão **aplicados e verificados** no Supabase — importação, RLS isolando por
 usuário e a view `sessao_periodo` concordando com `lib/periodo.ts` foram conferidas de ponta a
-ponta. A tela `/hunts` importa, lista, apaga, organiza em pastas e mostra os acumulados com
-sprites.
+ponta. O `0005` e o `0006` foram escritos em 2026-09-27 e **ainda não estão aplicados**; a ordem
+importa e está em "Endurecimento de segurança", abaixo. A tela `/hunts` importa, lista, apaga,
+organiza em pastas e mostra os acumulados com sprites.
 
 **Houve uma integração externa, e ela foi removida por completo em 2026-09-22** — código, schema,
-documentação e branches. Não resta ponta solta a manter, e **não é para ressuscitá-la**.
+documentação e branches. **Não é para ressuscitá-la.** Uma ponta solta apareceu cinco dias depois,
+fora do repositório: o `SUPABASE_JWT_SECRET` continuava nas variáveis de produção da Vercel, junto
+com outras chaves-mestras — diretriz 39.
 
-Quatro peças nasceram naquele contexto e hoje sustentam o site — **não apague nenhuma achando que
-é sobra**: `lib/importacao.ts` (o núcleo da importação, que continua fora da UI),
-`lib/supabase/jwt.ts` (de que `scripts/testar-pastas.ts` depende para exercitar a RLS de verdade),
-a tabela `personagem` e a coluna `perfil.fuso`.
+Três peças nasceram naquele contexto e hoje sustentam o site — **não apague nenhuma achando que é
+sobra**: `lib/importacao.ts` (o núcleo da importação, que continua fora da UI), a tabela
+`personagem` e a coluna `perfil.fuso`. A quarta, `lib/supabase/jwt.ts`, saiu em 2026-09-27 de
+propósito: os testes contra o banco passaram a usar contas descartáveis (diretriz 46), e assinar
+token obrigava a manter verificando o segredo HS256 legado, que forja qualquer papel.
 
 O de-para de nome de **item** para título do wiki existe desde 2026-09-22 em
 [lib/nomesDeItem.ts](lib/nomesDeItem.ts) — e a premissa antiga, de que faltava resolver plural,
@@ -100,6 +104,35 @@ O `0004` foi **aplicado e conferido** em 2026-09-23, pelo MCP do Supabase: quatr
 `drop_extra`, `update` com `using` **e** `with check`, e `scripts/testar-extras.ts` passando —
 inclusive o caso em que outro usuário recebe "sem erro" num update alheio e o valor **não muda**,
 que é a negação silenciosa da diretriz 45 acontecendo na nossa frente.
+
+**Endurecimento de segurança em 2026-09-27.** Uma revisão do repositório inteiro, conferida contra
+o banco e a Vercel de verdade, achou três problemas que não podiam esperar e alguns que podiam. O
+que mudou:
+
+- O regex de `Session data` era cúbico: 8 KB colados travavam a função por 50 s. O formato da data
+  agora é fixo, e o texto tem teto de 64 KB — diretriz 55.
+- `idsPorNome` queimava ~30 ids de sequência por importação, com os ids em `smallint`. Agora lê
+  antes de inserir, e o `0005` passa os ids a `integer` — diretriz 56.
+- A posse da pasta e do personagem saiu da server action e foi para o banco — diretriz 57.
+- Mundo, vocação e level do char saíram de `personagem`, que qualquer conta alterava, e foram para
+  `usuario_personagem`, que só o dono escreve. O nome de um personagem não muda mais.
+- `anon` perdeu todo privilégio nas tabelas, e `authenticated` perdeu `truncate`.
+- Headers de segurança em toda rota (`next.config.ts`); trocar a senha derruba as outras sessões;
+  o código de ativação vence (`criar-usuario.ts --expirar`); apagar hunt pede confirmação; as
+  dependências saíram de `"latest"`; a página órfã `/auth/error` foi apagada.
+
+As migrations foram testadas antes de chegar perto de produção: aplicadas num Postgres local
+(PGlite) sobre um banco com dados parecidos com os reais, reaplicadas, e montadas do zero, com cada
+regra exercitada como usuário. **A ordem de aplicação é a que não quebra o site no meio**:
+
+1. aplicar o `0005` — ele é compatível com o código que está no ar;
+2. fazer o deploy;
+3. aplicar o `0006`, que tira as colunas antigas de `personagem`;
+4. rodar `scripts/testar-pastas.ts` e `scripts/testar-extras.ts`.
+
+E quatro coisas que só se fazem no painel: tirar da Vercel as variáveis que o código não lê
+(diretriz 39); desligar as chaves de API legadas do Supabase; revogar o segredo JWT legado; e pôr
+o tamanho mínimo de senha no Auth, porque o `MIN_SENHA` do código só é conferido no navegador.
 
 **Identidade visual fechada em 2026-09-17.** Wordmark "lootibia" com a espada no lugar do `t`,
 desenhado em vetor: grotesca geométrica pesada, `a` de um andar, punho na cor do texto e só a
@@ -165,6 +198,11 @@ para tudo aqui); `smallint` para contadores pequenos; `date` (4 bytes) quando n�
 inteiro de centavos/permilagem em vez de `numeric`. PK `identity` inteira em vez de UUID (4 bytes
 contra 16, multiplicado por toda FK que referencia).
 
+Exceção medida: os ids de lookup eram `smallint` e viraram `integer` no `0005`. O teto de 32.767
+parecia folgado contra o número de linhas, mas quem gasta id é a sequência, e ela anda muito mais
+que as linhas — diretriz 56. O custo foi zero byte: o alinhamento já comia os 2 que o `smallint`
+economizava (`pg_column_size` igual antes e depois, em todas as tabelas).
+
 **10. Normalizar strings repetidas em tabelas de lookup.** Nome de item e de criatura se repetem
 milhares de vezes em dados de loot; armazenar a string em cada linha é desperdício puro. Linha de
 loot referencia `item_id` e `creature_id`, não texto.
@@ -179,6 +217,21 @@ Definir a regra no mesmo commit que cria a tabela.
 **13. Medir, não estimar.** Antes de qualquer carga em massa, medir com
 `pg_size_pretty(pg_total_relation_size('tabela'))` e `pg_database_size(current_database())`, e
 registrar o número. Tupla morta conta para o tamanho — considerar `VACUUM` após deleção grande.
+
+**56. `upsert` com `ignoreDuplicates` gasta sequência, mesmo sem gravar linha.** O Postgres calcula
+o `default` da coluna — o `nextval` da identity — ANTES de descobrir o conflito, e valor de
+sequência não volta. `idsPorNome` mandava todos os nomes de cada importação num `upsert` desses.
+Medido em 2026-09-27: `item_id_seq` em **1.179** com **156** itens gravados, ~30 ids por
+importação, contra um teto de 32.767 (`smallint`). Dava umas mil importações, somando todas as
+contas, até toda importação com item passar a falhar — e uma chamada só ao PostgREST, com 31 mil
+nomes repetidos, esgotava tudo de uma vez sem gravar uma linha.
+
+Duas regras:
+
+- **Ler antes de inserir** em tabela de lookup: só vai para o `insert` o que a leitura não achou.
+  O `ignoreDuplicates` fica para a corrida entre dois usuários gravando o mesmo nome novo.
+- **Dimensionar id pelo consumo da sequência, não pela contagem de linhas.** A conta da diretriz 9
+  estava certa para as linhas e errada para o que de fato gasta id.
 
 ---
 
@@ -263,9 +316,11 @@ cresce com o uso, e não há lista de onde escolher.
 
 A segunda é de segurança, e é a que surpreende. A RLS dessas tabelas é `using (true)`, porque todo
 autenticado precisa ler o vocabulário. Logo, **um id de tabela de lookup vindo do cliente NÃO está
-protegido pela RLS** — ela não tem como recusar o id do char de outra pessoa. Quem recusa tem de ser
-uma consulta explícita à tabela de vínculo (`usuario_personagem`). Medido em 22/09 contra o banco
-real: a checagem rejeita o id alheio, e a RLS sozinha **teria deixado passar**.
+protegido pela RLS** — ela não tem como recusar o id do char de outra pessoa. Quem recusa tem de
+olhar a tabela de vínculo (`usuario_personagem`). Em 22/09 isso virou uma consulta na server
+action, e ela rejeitava o id alheio — medido. **Mas não era fronteira**: o token do usuário grava
+em `sessao` direto pelo PostgREST, por fora da action. Desde o `0005` quem recusa é um gatilho no
+banco, e a consulta da action ficou só para dar frase — diretriz 57.
 
 Vale para qualquer campo novo em que o cliente mande o id de um lookup. `<select>` no HTML não é
 validação: é o cliente falando.
@@ -275,6 +330,10 @@ autenticado poluir os lookups com nomes inventados, e adiava o endurecimento "pa
 usuário além de nós". O caso do `personagem` foi fechado por outro caminho, sem `security definer`:
 tirando o texto livre, ninguém mais inventa nome. `monstro`, `item` e `spot` continuam abertos, e
 continuam sendo risco aceito — só que agora consta aqui, e não só dentro do SQL.
+
+A condição do `0001` já vale: em 2026-09-27 eram **5 contas**. O `0005` não fechou a porta, mas
+tirou o que ela deixava fazer de pior: nome ganhou teto de tamanho, e o id deixou de ter um teto
+alcançável (diretriz 56). Inventar nome continua possível, e continua risco aceito.
 
 **53. Número medido e número estimado não somam no mesmo total.** Todo número da tela sai do
 texto que o jogador colou e pode ser conferido contra ele. Os **drops extras** são a exceção: o
@@ -388,6 +447,21 @@ Regra: **modal nasce por portal no `<body>`, com `stopPropagation` no próprio d
 barreira no lugar certo, em vez de um `preventDefault` por botão que alguém vai esquecer no
 próximo.
 
+**55. Regex que roda sobre texto colado é superfície de ataque.** Em 2026-09-27 o parser do Hunt
+Analyser lia a linha de `Session data` com `^From\s+(.+?)\s+to\s+(.+)$`. Parece inocente, e é
+**cúbico**: `.+?` e os dois `\s+` disputam os mesmos espaços, e o motor tenta todas as divisões.
+Medido: 2 mil espaços, 0,9 s; 4 mil, 6,7 s; 8 mil, 50 s. Oito KB colados no formulário travavam a
+função até o timeout — e, com várias requisições por instância, travavam quem estivesse junto.
+
+Três regras:
+
+- **Formato fixo em vez de "qualquer coisa até o delimitador"**, quando o formato é conhecido. Com
+  a data escrita no próprio regex não há ambiguidade: 1 milhão de espaços leva 2,4 ms.
+- **Teto de tamanho antes de qualquer regex** — `MAX_TEXTO`, 64 KB, contra 1 a 2 KB de uma sessão
+  real.
+- **Teste com entrada hostil e teto de tempo** (`lib/hunt.test.ts`), dimensionado para uma
+  regressão falhar em segundos em vez de pendurar o teste.
+
 **29. Testes contra fixtures gravadas, nunca contra a API ao vivo.** Respostas reais em
 `test/fixtures/`, parsers testados contra elas. Um script separado revalida as fixtures contra a
 API de verdade, rodado sob demanda.
@@ -430,12 +504,34 @@ código. A API de admin, que o script usa, ignora essa trava e continua criando 
 primeiro acesso é um `signInWithPassword` comum e a troca de senha é um `updateUser`, os dois com
 a chave publicável. Pôr a secreta em produção aumentaria a superfície sem destravar recurso nenhum.
 
+**Medido em 2026-09-27: a regra acima estava sendo violada, e ninguém tinha visto.** As variáveis de
+produção do projeto na Vercel tinham `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`SUPABASE_JWT_SECRET` e sete `POSTGRES_*` com a senha do banco. Vieram da integração Supabase ↔
+Vercel — todas com o mesmo `configurationId` —, que injeta tudo ao conectar. O código de produção lê
+só `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, conferido por `grep`.
+
+É a diretriz 52 aplicada à infraestrutura: a prosa dizia "nunca", e ninguém tinha olhado a lista.
+Conferir pelos NOMES, sem abrir valor nenhum:
+
+```bash
+vercel env ls production
+```
+
+Tem de sair só as duas `NEXT_PUBLIC_*`. E integração que sincroniza variável volta a injetá-las
+se alguém clicar em "resync": depois de apagar, desligar a sincronização. **Remoção ainda pendente
+em 2026-09-27** — atualizar esta linha quando for feita.
+
 **40. `senha_definida` é porteiro de fluxo, não fronteira de segurança.** A flag vive em
 `user_metadata`, que o próprio dono consegue gravar — quem quiser vira a flag sem trocar a senha.
 O que ele ganha é continuar com uma senha que o Davi mandou por mensagem; não ganha dado de mais
 ninguém, porque quem isola continua sendo a RLS. A segurança real está no código de ativação ser
 um segredo de ~49 bits sorteado com `crypto.getRandomValues`. Não transformar essa flag em
 autorização de coisa alguma.
+
+Desde 2026-09-27 o código também **vence**: `criar-usuario.ts --expirar` troca por uma senha
+aleatória a conta que ficou mais de 7 dias no código, pela data gravada em `app_metadata` — que o
+usuário, ao contrário do `user_metadata`, não consegue escrever. E trocar a senha chama
+`signOut({ scope: "others" })`: se alguém usou o código antes do dono, sai junto.
 
 **41. Transição de autenticação usa navegação DURA, nunca `router.push`.** Login, definir senha e
 sair trocam `window.location.assign`. `router.push` é navegação do cliente: serve o que estiver no
@@ -510,19 +606,45 @@ linha e gravo nela o `usuario_id` de outra pessoa.
 
 **46. Regra que vive no Postgres precisa de teste que fale com o Postgres.** Nenhum teste de
 `lib/` pegaria a diretriz 45: não há lógica errada, o `tsc` está feliz e a chamada "funciona".
-`scripts/testar-pastas.ts` existe para essa classe — ele assina um JWT de usuário e exercita a
-RLS pelo mesmo caminho da tela:
+`scripts/testar-pastas.ts` e `scripts/testar-extras.ts` existem para essa classe — eles entram como
+usuário de verdade e exercitam a RLS pelo mesmo caminho da tela:
 
 ```bash
 node --experimental-strip-types --env-file=.env.local scripts/testar-pastas.ts
+node --experimental-strip-types --env-file=.env.local scripts/testar-extras.ts
 ```
 
 Duas regras: ele **relê do banco** em vez de confiar no retorno da chamada — era exatamente o
 retorno que mentia —, e **não entra na diretriz 3**, porque precisa de credencial e de rede, e a
 lista de validação tem de rodar em qualquer máquina.
 
-Ele assina um JWT de usuário com `lib/supabase/jwt.ts`, e é isso que o torna válido: a chave
-secreta ignoraria a RLS, que é justamente o que se quer testar.
+Cada um cria duas contas descartáveis (prefixo reservado `zz-teste-`), entra nelas com
+`signInWithPassword` pela chave publicável e apaga as duas no fim — `scripts/usuarios-de-teste.ts`.
+A chave secreta só cria e apaga as contas; se o teste rodasse com ela, ignoraria a RLS, que é
+justamente o que se quer testar.
+
+Até 2026-09-27 eles assinavam um JWT com o segredo HS256 legado. Testava a coisa certa, mas prendia
+o projeto a manter verificando uma chave que forja qualquer papel, `service_role` incluso. De
+quebra, os testes pararam de mexer nos dados de quem usa o site: antes pegavam a primeira conta
+real e moviam uma sessão dela de pasta.
 
 Se precisar saber se a culpa é da RLS, repita a operação com a chave secreta, que a ignora: se
-funcionar lá e não com o JWT, é política faltando.
+funcionar lá e não logado como usuário, é política faltando.
+
+**57. Server action não é fronteira: o token do usuário fala direto com o PostgREST.** O cookie de
+sessão do `@supabase/ssr` é legível pelo JavaScript e a chave publicável é pública, então qualquer
+pessoa logada monta a própria chamada ao PostgREST e passa por fora de toda server action. O que a
+action confere é **recado para o usuário**; o que protege tem de estar no banco — `check`,
+política, gatilho.
+
+Aconteceu duas vezes antes de alguém notar: a checagem de personagem da diretriz 49 e a de pasta
+(`lib/posse.ts`) moravam em server actions e eram contornáveis por um `update` direto. Desde o
+`0005`, a pasta é conferida no `with check` das políticas de `sessao` e `drop_extra`, e o
+personagem, num gatilho.
+
+Por que gatilho no personagem, e não `with check`: o `with check` só enxerga a linha NOVA. O
+vínculo com um char pode acabar depois (`removerPersonagem`), e as hunts continuam apontando para
+ele; com a regra no `with check` do update, mover uma dessas hunts para uma pasta seria recusado —
+e em silêncio, que é a diretriz 45 de novo. O gatilho enxerga `old` e só confere quando o
+personagem muda de fato. Vale para toda regra de posse que possa deixar de valer depois de a linha
+existir.

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buscarPersonagem, ErroDaTibiaData } from "@/lib/tibiadata";
 import type { UnidadeDaMeta } from "@/lib/meta";
+import { pastaEhMinha } from "@/lib/posse";
+import { idsPorNome } from "@/lib/importacao";
 
 export interface Resultado {
   ok: boolean;
@@ -21,6 +23,12 @@ export interface Resultado {
  *
  * O `usuario_id` aparece só no INSERT, porque a coluna é `not null` e o banco
  * precisa de um valor; o `with check` da política confere que é o seu.
+ *
+ * A POSSE do que o cliente aponta por id — a pasta de uma sessão, o personagem
+ * de uma importação — também é do banco, desde o 0005: `with check` para a
+ * pasta, gatilho para o personagem (diretriz 57). As conferências que sobraram
+ * aqui existem para dar frase ao usuário, não para proteger nada: o token dele
+ * fala direto com o PostgREST e passa por fora deste arquivo.
  */
 async function usuarioAtual() {
   const supabase = await createClient();
@@ -133,8 +141,30 @@ export async function apagarPasta(formData: FormData): Promise<void> {
   revalidatePath("/hunts");
 }
 
+/** Ninguém tem dezenas de pastas; uma reordenação maior que isto é abuso. */
+const MAX_PASTAS = 200;
+
+/** `pasta.ordem` é `smallint`. */
+const MAX_ORDEM = 32_767;
+
 /** Reordena as pastas. `ordens` é `[id, ordem]` na sequência final. */
 export async function reordenarPastas(ordens: [number, number][]): Promise<void> {
+  // Server action é endpoint: `ordens` chega do cliente e pode ser qualquer
+  // coisa, o tipo do TypeScript não existe em tempo de execução. Sem esta
+  // conferência, um array de 100 mil pares virava 100 mil `update` em paralelo
+  // contra o Supabase, disparados por uma requisição só.
+  if (!Array.isArray(ordens) || ordens.length > MAX_PASTAS) return;
+  const pares = ordens.every(
+    (par) =>
+      Array.isArray(par) &&
+      par.length === 2 &&
+      Number.isInteger(par[0]) &&
+      Number.isInteger(par[1]) &&
+      par[1] >= 0 &&
+      par[1] <= MAX_ORDEM,
+  );
+  if (!pares) return;
+
   const { supabase, usuario } = await usuarioAtual();
   if (!usuario) return;
 
@@ -159,9 +189,17 @@ export async function moverSessao(formData: FormData): Promise<void> {
   const { supabase, usuario } = await usuarioAtual();
   if (!usuario) return;
 
+  if (pastaId !== null && !(await pastaEhMinha(supabase, pastaId))) return;
+
   await supabase.from("sessao").update({ pasta_id: pastaId }).eq("id", sessaoId);
   revalidatePath("/hunts");
 }
+
+/** Igual ao `check` de `config_mundo.mundo` (0005). Nome de mundo do Tibia tem menos de 15. */
+const LIMITE_MUNDO = 40;
+
+/** `integer` no banco. */
+const MAX_INTEIRO = 2_147_483_647;
 
 /** Preço da Tibia Coin, em gold, por mundo. */
 export async function salvarPrecoTc(
@@ -171,8 +209,9 @@ export async function salvarPrecoTc(
   const mundo = String(formData.get("mundo") ?? "").trim();
   const preco = Number(String(formData.get("preco_tc") ?? "").replace(/[^\d]/g, ""));
 
-  if (!mundo) return { ok: false, mensagem: "Mundo inválido." };
+  if (!mundo || mundo.length > LIMITE_MUNDO) return { ok: false, mensagem: "Mundo inválido." };
   if (!Number.isFinite(preco) || preco <= 0) return { ok: false, mensagem: "Informe o preço em gold." };
+  if (preco > MAX_INTEIRO) return { ok: false, mensagem: "Preço grande demais." };
 
   const { supabase, usuario } = await usuarioAtual();
   if (!usuario) return { ok: false, mensagem: "Faça login." };
@@ -188,6 +227,9 @@ export async function salvarPrecoTc(
   return { ok: true, mensagem: `Preço de ${mundo} salvo.` };
 }
 
+/** Nome de char no Tibia tem até 29 caracteres; 60 é o `check` de `personagem.nome` (0005). */
+const LIMITE_NOME_PERSONAGEM = 60;
+
 /**
  * Cadastra um personagem, buscando mundo/level/vocação na TibiaData.
  *
@@ -201,6 +243,9 @@ export async function cadastrarPersonagem(
 ): Promise<Resultado> {
   const nome = String(formData.get("nome") ?? "").trim();
   if (!nome) return { ok: false, mensagem: "Digite o nome do personagem." };
+  if (nome.length > LIMITE_NOME_PERSONAGEM) {
+    return { ok: false, mensagem: "Nome grande demais para um personagem do Tibia." };
+  }
 
   const { supabase, usuario } = await usuarioAtual();
   if (!usuario) return { ok: false, mensagem: "Faça login." };
@@ -218,33 +263,33 @@ export async function cadastrarPersonagem(
   }
   if (!achado) return { ok: false, mensagem: `Não existe personagem "${nome}" no Tibia.` };
 
-  // `personagem` é vocabulário compartilhado (nome de char é único no jogo
-  // inteiro), então upsert pelo nome e não por usuário.
-  const { data: linha, error: erroPersonagem } = await supabase
-    .from("personagem")
-    .upsert(
-      {
-        nome: achado.nome,
-        mundo: achado.mundo,
-        vocacao: achado.vocacao,
-        nivel: achado.nivel,
-        visto_em: new Date().toISOString(),
-      },
-      { onConflict: "nome" },
-    )
-    .select("id")
-    .single();
-
-  if (erroPersonagem || !linha) {
-    return { ok: false, mensagem: erroPersonagem?.message ?? "Não deu para gravar o personagem." };
+  // O NOME é vocabulário compartilhado — nome de char é único no jogo inteiro
+  // — e entra só por insert: desde o 0005 um gatilho impede renomear, e o 0006
+  // tira a política de update. `idsPorNome` lê antes de inserir, para não
+  // queimar id da sequência (diretriz 56).
+  let personagemId: number | undefined;
+  try {
+    personagemId = (await idsPorNome(supabase, "personagem", [achado.nome])).get(achado.nome);
+  } catch (e) {
+    return { ok: false, mensagem: (e as Error).message };
   }
+  if (personagemId === undefined) return { ok: false, mensagem: "Não deu para gravar o personagem." };
 
-  const { error: erroVinculo } = await supabase
-    .from("usuario_personagem")
-    .upsert(
-      { usuario_id: usuario.id, personagem_id: linha.id },
-      { onConflict: "usuario_id,personagem_id" },
-    );
+  // O que a TibiaData respondeu vai na SUA linha de vínculo, não na
+  // compartilhada. Até o 0005, mundo e level moravam em `personagem`, que
+  // qualquer conta podia alterar — e o mundo decide o preço da TC na tela do
+  // dono do char. Vazio vira `null`: "não sei" não é um mundo chamado "".
+  const { error: erroVinculo } = await supabase.from("usuario_personagem").upsert(
+    {
+      usuario_id: usuario.id,
+      personagem_id: personagemId,
+      mundo: achado.mundo || null,
+      vocacao: achado.vocacao || null,
+      nivel: achado.nivel > 0 ? achado.nivel : null,
+      visto_em: new Date().toISOString(),
+    },
+    { onConflict: "usuario_id,personagem_id" },
+  );
   if (erroVinculo) return { ok: false, mensagem: erroVinculo.message };
 
   revalidatePath("/hunts");

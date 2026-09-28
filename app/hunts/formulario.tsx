@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { importarSessao, type ResultadoImportacao } from "./acoes";
+import { MAX_TEXTO } from "@/lib/huntSession";
 
 const CAMPO =
   "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20";
@@ -78,6 +79,7 @@ export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
         <textarea
           name="texto"
           rows={10}
+          maxLength={MAX_TEXTO}
           spellCheck={false}
           placeholder={"Session data: From 2026-09-15, 19:34:12 to 2026-09-15, 21:25:10\nSession: 01:50h\nRaw XP Gain: 7,051,729\n…"}
           className={`${CAMPO} resize-y font-mono text-xs leading-relaxed`}

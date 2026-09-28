@@ -15,7 +15,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lerSessaoHunt, ErroDeParse, type ContagemNomeada } from "./huntSession.ts";
+import { lerSessaoHunt, ErroDeParse } from "./huntSession.ts";
 
 export interface PedidoDeImportacao {
   /** Texto cru copiado do Hunt Analyser. */
@@ -113,38 +113,69 @@ export function fusoValido(fuso: string): boolean {
   }
 }
 
+/** As tabelas de lookup: vocabulário compartilhado, um nome por linha (diretriz 10). */
+export type TabelaDeNomes = "monstro" | "item" | "spot" | "personagem";
+
+/** Teto do nome do spot, igual ao `check` de `spot.nome` (migration 0005). */
+export const LIMITE_SPOT = 60;
+
 /**
  * Resolve nomes para ids numa tabela de lookup, criando o que faltar.
  *
- * Duas idas ao banco por tabela, não uma por nome: uma sessão traz ~13 nomes e o
- * Supabase cobra latência por chamada — num slash command essa latência sai do
- * orçamento de 15 min do follow-up, mas no site sai da cara do usuário. O
- * `upsert` com `ignoreDuplicates` cobre a corrida de dois usuários importando o
- * mesmo monstro ao mesmo tempo.
+ * ## Lê ANTES de inserir, e isso é conserto, não estilo
+ *
+ * A versão anterior mandava todos os nomes num `upsert` com `ignoreDuplicates`
+ * e depois lia. Parecia inofensivo — nome repetido não vira linha —, mas o
+ * Postgres calcula o `default` da coluna, o `nextval` da identity, ANTES de
+ * descobrir o conflito, e valor de sequência não volta. Cada importação
+ * queimava um id por item da sessão, existisse o item ou não. Medido em
+ * 2026-09-27: `item_id_seq` em 1.179 com 156 itens gravados, ~30 ids por
+ * importação, contra um teto de 32.767 enquanto o id era `smallint`
+ * (diretriz 56).
+ *
+ * Agora só vai para o `insert` o que a leitura não achou — no dia a dia, nada.
+ * O `ignoreDuplicates` fica para a corrida de dois usuários gravando o mesmo
+ * nome novo ao mesmo tempo, e a segunda leitura resolve o id de quem perdeu.
+ *
+ * Uma ida ao banco quando todo nome já existe, três quando falta algum — por
+ * tabela, não por nome: uma sessão traz ~13 nomes e o Supabase cobra latência
+ * por chamada, que sai da cara do usuário.
  */
 export async function idsPorNome(
   supabase: SupabaseClient,
-  tabela: "monstro" | "item" | "spot",
+  tabela: TabelaDeNomes,
   nomes: string[],
 ): Promise<Map<string, number>> {
   if (nomes.length === 0) return new Map();
   const unicos = [...new Set(nomes)];
 
-  const { error: erroUpsert } = await supabase
+  const mapa = await lerIds(supabase, tabela, unicos);
+  const novos = unicos.filter((n) => !mapa.has(n));
+  if (novos.length === 0) return mapa;
+
+  const { error: erroInsert } = await supabase
     .from(tabela)
     .upsert(
-      unicos.map((nome) => ({ nome })),
+      novos.map((nome) => ({ nome })),
       { onConflict: "nome", ignoreDuplicates: true },
     );
-  if (erroUpsert) throw new Error(`Falha ao gravar ${tabela}: ${erroUpsert.message}`);
+  if (erroInsert) throw new Error(`Falha ao gravar ${tabela}: ${erroInsert.message}`);
 
-  const { data, error } = await supabase.from(tabela).select("id, nome").in("nome", unicos);
-  if (error) throw new Error(`Falha ao ler ${tabela}: ${error.message}`);
-
-  const mapa = new Map<string, number>();
-  for (const linha of data ?? []) mapa.set(linha.nome as string, linha.id as number);
+  for (const [nome, id] of await lerIds(supabase, tabela, novos)) mapa.set(nome, id);
   const faltando = unicos.filter((n) => !mapa.has(n));
   if (faltando.length > 0) throw new Error(`Sem id para: ${faltando.join(", ")}`);
+  return mapa;
+}
+
+async function lerIds(
+  supabase: SupabaseClient,
+  tabela: TabelaDeNomes,
+  nomes: string[],
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase.from(tabela).select("id, nome").in("nome", nomes);
+  if (error) throw new Error(`Falha ao ler ${tabela}: ${error.message}`);
+  const mapa = new Map<string, number>();
+  for (const linha of data ?? []) mapa.set(linha.nome as string, linha.id as number);
   return mapa;
 }
 
@@ -154,6 +185,27 @@ export async function idsPorNome(
  * Devolve resultado tipado em vez de lançar nos casos esperados: duplicata e
  * texto inválido são o dia a dia, não excepcionais, e quem chama decide como
  * apresentá-los.
+ *
+ * ## Tudo ou nada, sem transação
+ *
+ * O PostgREST não abre transação entre chamadas, e a sessão e o detalhe são
+ * três `insert` separados. Se o detalhe falhasse depois de a sessão gravada, ela
+ * ficava sem monstros nem itens — e colar o texto de novo dava "já foi
+ * importada", porque a sessão incompleta ocupava o `unique (usuario_id,
+ * inicio)`. O único conserto era apagar e reimportar, sabendo que precisava.
+ *
+ * Duas medidas fecham isso:
+ *
+ * 1. **Todo lookup se resolve ANTES da sessão.** É o passo que mais vai ao
+ *    banco; falhando ali, não há sessão gravada para desfazer. O que sobra no
+ *    vocabulário é nome que a próxima tentativa gravaria de qualquer jeito.
+ * 2. **Se o detalhe falhar, a sessão é apagada**, e o `on delete cascade` de
+ *    `sessao_monstro` e `sessao_item` leva junto o que chegou a entrar. O texto
+ *    pode ser colado de novo.
+ *
+ * O que isso não cobre: se a própria compensação falhar, a mensagem diz que a
+ * sessão ficou incompleta e precisa ser apagada. Transação de verdade exigiria
+ * uma função no banco — e não compensa enquanto o `delete` resolver.
  */
 export async function importarSessao(
   supabase: SupabaseClient,
@@ -167,15 +219,30 @@ export async function importarSessao(
     return { ok: false, motivo: "parse", mensagem: msg };
   }
 
+  let sessaoId: number;
+  let linhasMonstro: { sessao_id: number; monstro_id: number; quantidade: number }[];
+  let linhasItem: { sessao_id: number; item_id: number; quantidade: number }[];
+
   try {
     const fuso = fusoValido(pedido.fuso) ? pedido.fuso : "UTC";
     const inicio = instanteDoRelogioLocal(sessao.inicio, fuso);
 
     const rotulo = pedido.spot?.trim() || null;
+    if (rotulo && rotulo.length > LIMITE_SPOT) {
+      return {
+        ok: false,
+        motivo: "parse",
+        mensagem: `O nome do spot passa de ${LIMITE_SPOT} caracteres.`,
+      };
+    }
 
-    const spotId = rotulo
-      ? ((await idsPorNome(supabase, "spot", [rotulo])).get(rotulo) ?? null)
-      : null;
+    // Os três lookups em paralelo, e antes da sessão — ver o comentário acima.
+    const [idsSpot, idsMonstro, idsItem] = await Promise.all([
+      idsPorNome(supabase, "spot", rotulo ? [rotulo] : []),
+      idsPorNome(supabase, "monstro", sessao.monstrosMortos.map((c) => c.nome)),
+      idsPorNome(supabase, "item", sessao.itensLootados.map((c) => c.nome)),
+    ]);
+    const spotId = rotulo ? (idsSpot.get(rotulo) ?? null) : null;
 
     // O personagem chega resolvido: quem escolhe é um seletor de chars já
     // cadastrados, então não há nome novo para criar aqui. O spot continua
@@ -214,45 +281,53 @@ export async function importarSessao(
       };
     }
 
-    const sessaoId = inserida.id as number;
-
-    const gravarDetalhe = async (
-      tabela: "sessao_monstro" | "sessao_item",
-      lookup: "monstro" | "item",
-      coluna: "monstro_id" | "item_id",
-      contagens: ContagemNomeada[],
-    ) => {
-      if (contagens.length === 0) return;
-      const ids = await idsPorNome(
-        supabase,
-        lookup,
-        contagens.map((c) => c.nome),
-      );
-      const linhas = contagens.map((c) => ({
-        sessao_id: sessaoId,
-        [coluna]: ids.get(c.nome)!,
-        quantidade: c.quantidade,
-      }));
-      const { error } = await supabase.from(tabela).insert(linhas);
-      if (error) throw new Error(`Falha ao gravar ${tabela}: ${error.message}`);
-    };
-
-    await gravarDetalhe("sessao_monstro", "monstro", "monstro_id", sessao.monstrosMortos);
-    await gravarDetalhe("sessao_item", "item", "item_id", sessao.itensLootados);
-
-    return {
-      ok: true,
-      sessaoId,
-      duracaoSegundos: sessao.duracaoSegundos,
-      monstros: sessao.monstrosMortos.length,
-      itens: sessao.itensLootados.length,
-      pastaId: pedido.pastaId ?? null,
-      loot: sessao.loot,
-      supplies: sessao.supplies,
-      // `balance` é derivado: conferido no parse, nunca persistido (diretriz 6).
-      profit: sessao.balance,
-    };
+    sessaoId = inserida.id as number;
+    linhasMonstro = sessao.monstrosMortos.map((c) => ({
+      sessao_id: sessaoId,
+      monstro_id: idsMonstro.get(c.nome)!,
+      quantidade: c.quantidade,
+    }));
+    linhasItem = sessao.itensLootados.map((c) => ({
+      sessao_id: sessaoId,
+      item_id: idsItem.get(c.nome)!,
+      quantidade: c.quantidade,
+    }));
   } catch (e) {
+    // Nada gravado em `sessao` até aqui: não há o que desfazer.
     return { ok: false, motivo: "banco", mensagem: (e as Error).message };
   }
+
+  try {
+    if (linhasMonstro.length > 0) {
+      const { error } = await supabase.from("sessao_monstro").insert(linhasMonstro);
+      if (error) throw new Error(`Falha ao gravar sessao_monstro: ${error.message}`);
+    }
+    if (linhasItem.length > 0) {
+      const { error } = await supabase.from("sessao_item").insert(linhasItem);
+      if (error) throw new Error(`Falha ao gravar sessao_item: ${error.message}`);
+    }
+  } catch (e) {
+    const motivo = (e as Error).message;
+    const { error: erroDesfazer } = await supabase.from("sessao").delete().eq("id", sessaoId);
+    return {
+      ok: false,
+      motivo: "banco",
+      mensagem: erroDesfazer
+        ? `${motivo}. A sessão ficou gravada sem o detalhe completo — apague-a antes de importar de novo.`
+        : `${motivo}. Nada foi gravado; pode colar o texto de novo.`,
+    };
+  }
+
+  return {
+    ok: true,
+    sessaoId,
+    duracaoSegundos: sessao.duracaoSegundos,
+    monstros: sessao.monstrosMortos.length,
+    itens: sessao.itensLootados.length,
+    pastaId: pedido.pastaId ?? null,
+    loot: sessao.loot,
+    supplies: sessao.supplies,
+    // `balance` é derivado: conferido no parse, nunca persistido (diretriz 6).
+    profit: sessao.balance,
+  };
 }
