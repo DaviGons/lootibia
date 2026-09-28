@@ -106,7 +106,9 @@ export function Lateral({
         </GrupoDaLateral>
 
         <GrupoDaLateral id="ferramentas" titulo="Ferramentas">
-          <EmBreve icone={<PackageSearch />}>Stash analyzer</EmBreve>
+          <ItemDaLateral href="/ferramentas/stash" icone={<PackageSearch />}>
+            Stash analyzer
+          </ItemDaLateral>
         </GrupoDaLateral>
 
         <GrupoDaLateral id="calculadoras" titulo="Calculadoras">
@@ -131,22 +133,6 @@ export function Lateral({
 
       <JanelaDeImportacao chars={chars} />
     </Gaveta>
-  );
-}
-
-/** Ferramenta anunciada e ainda não feita: aparece, mas não leva a lugar nenhum. */
-function EmBreve({ icone, children }: { icone: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <span
-      aria-disabled
-      className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground/60"
-    >
-      <span aria-hidden className="shrink-0 [&>svg]:h-[14px] [&>svg]:w-[14px]">
-        {icone}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      <span className="rounded-full border px-1.5 text-[10px] leading-4">em breve</span>
-    </span>
   );
 }
 
