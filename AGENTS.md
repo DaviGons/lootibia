@@ -44,15 +44,20 @@ aplicadas em produção (a `0005` e a `0006` em 2026-09-28).
 - **Contas:** login por usuário e senha desde 2026-09-19, sem cadastro. O Davi cria as contas com
   `scripts/criar-usuario.ts`, que sorteia um código de ativação; o site obriga a trocar a senha no
   primeiro acesso. Modelo em [lib/conta.ts](lib/conta.ts).
-- **Hunts:** `/hunts` importa, lista, apaga, organiza em pastas com meta opcional em TC ou gp
+- **Lateral:** mora no layout de `app/(app)/` (grupo de rotas, fora da URL) e aparece em toda
+  página logada, em três grupos recolhíveis: **Analyzers** (todas as hunts, pastas, adicionar nova
+  hunt), **Ferramentas** (Stash analyzer, anunciado como "em breve") e **Calculadoras**
+  ([components/lateral.tsx](components/lateral.tsx)).
+- **Hunts:** `/hunts` lista, apaga, organiza em pastas com meta opcional em TC ou gp
   ([lib/meta.ts](lib/meta.ts)) e mostra os acumulados com sprites de criatura. Cada sessão abre um
-  analyzer ([components/analyzer.tsx](components/analyzer.tsx)).
+  analyzer ([components/analyzer.tsx](components/analyzer.tsx)). A importação é uma janela
+  ([components/importar-hunt.tsx](components/importar-hunt.tsx)), aberta pela lateral ou pelo topo.
 - **Personagens:** cadastrados em `/config`, conferidos contra a TibiaData. Mundo, vocação e level
   ficam em `usuario_personagem`.
 - **Drops extras:** rare anotado com o valor que o usuário dá, somado à parte do profit
   ([lib/extras.ts](lib/extras.ts)).
-- **Ferramentas:** `/ferramentas` reúne as ferramentas. A primeira é `/ferramentas/level`, que prevê
-  quando o char chega a um level pelo XP/h real das hunts dele ([lib/level.ts](lib/level.ts)).
+- **Calculadoras:** `/calculadoras/level` prevê quando o char chega a um level pelo XP/h real das
+  hunts dele ([lib/level.ts](lib/level.ts)). Nasceu em `/ferramentas/level`, que redireciona.
 - **Dia do jogo:** [lib/periodo.ts](lib/periodo.ts) sabe a que dia de Tibia um instante pertence (o
   dia vira no server save, 10:00 de Berlim). A rotação do Rashid ([lib/rashid.ts](lib/rashid.ts))
   depende dele.

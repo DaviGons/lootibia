@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Folder, Inbox, Layers } from "lucide-react";
+import { Folder, Inbox, Layers, PackageSearch, TrendingUp } from "lucide-react";
 import { Marca } from "@/components/marca";
 import { LogoutButton } from "@/components/logout-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -7,6 +7,9 @@ import { progressoDaMeta, type UnidadeDaMeta } from "@/lib/meta";
 import { NovaPasta, EditarPasta } from "@/components/pasta-form";
 import { OrdenarPastas } from "@/components/ordenar-pastas";
 import { Gaveta } from "@/components/gaveta";
+import { GrupoDaLateral, LinkDaLateral } from "@/components/link-da-lateral";
+import { BotaoNovaHunt, JanelaDeImportacao } from "@/components/importar-hunt";
+import type { CharDoSeletor } from "@/app/(app)/hunts/formulario";
 
 export interface PastaNaLateral {
   id: number;
@@ -18,120 +21,132 @@ export interface PastaNaLateral {
 }
 
 /**
- * Navegação do app. Pastas criadas pelo usuário, na ordem que ele definiu.
+ * Navegação do app, em três grupos:
  *
- * Não há mais lista de períodos aqui. Ela misturava granularidades que se
- * sobrepunham — "semana atual" e "este mês" ao mesmo tempo — e era navegação
- * fingindo ser filtro. O recorte por tempo virou um controle único na barra
- * de cima; a lateral responde só "qual conjunto de hunts".
+ * - **Analyzers** — o núcleo: todas as hunts, as pastas e a importação.
+ * - **Ferramentas** — o que analisa algo que o jogador traz (o stash, por ora
+ *   só anunciado).
+ * - **Calculadoras** — o que calcula a partir de números.
+ *
+ * Mora no layout de `app/(app)`, e por isso aparece em toda página logada. Não
+ * sabe qual página está aberta: quem destaca o item ativo é `LinkDaLateral`,
+ * no navegador.
  */
 export function Lateral({
   pastas,
-  selecionada,
   totalDeHunts,
   semPasta,
   precoTc,
   usuario,
+  chars,
 }: {
   pastas: PastaNaLateral[];
-  selecionada: string | null;
   totalDeHunts: number;
   semPasta: number;
   precoTc: number | null;
   usuario: string | null;
+  chars: CharDoSeletor[];
 }) {
   return (
     <Gaveta>
       <aside className="flex h-dvh w-[238px] shrink-0 flex-col gap-5 overflow-y-auto border-r bg-secondary/40 p-3 lg:sticky lg:top-0">
-      <Link href="/hunts" className="px-2 pt-0.5 text-foreground" aria-label="lootibia — início">
-        <Marca altura={21} />
-      </Link>
+        <Link href="/hunts" className="px-2 pt-0.5 text-foreground" aria-label="lootibia — início">
+          <Marca altura={21} />
+        </Link>
 
-      <div>
-        <ItemDaLateral
-          href="/hunts"
-          ativo={selecionada === null}
-          contagem={totalDeHunts}
-          icone={<Layers />}
-        >
-          Todas as hunts
-        </ItemDaLateral>
-      </div>
-
-      <div>
-        <h2 className="mb-1.5 flex items-center px-2 text-[10.5px] font-semibold uppercase tracking-[.09em] text-muted-foreground">
-          Pastas
-          <NovaPasta />
-        </h2>
-
-        {pastas.length === 0 && (
-          <p className="px-2 py-1 text-xs leading-relaxed text-muted-foreground">
-            Nenhuma pasta ainda. Crie uma para agrupar hunts por campanha e pôr uma meta.
-          </p>
-        )}
-
-        {pastas.map((p) => {
-          const meta =
-            p.meta_valor && p.meta_unidade
-              ? progressoDaMeta({ valor: p.meta_valor, unidade: p.meta_unidade }, p.profit, precoTc, p.hunts)
-              : null;
-          return (
-            <ItemDaLateral
-              key={p.id}
-              href={`/hunts?pasta=${p.id}`}
-              ativo={selecionada === String(p.id)}
-              contagem={p.hunts}
-              barra={meta?.fracao}
-              acao={
-                <>
-                  <OrdenarPastas ids={pastas.map((x) => x.id)} atual={p.id} />
-                  <EditarPasta pasta={p} />
-                </>
-              }
-              icone={<Folder />}
-            >
-              {p.nome}
-            </ItemDaLateral>
-          );
-        })}
-
-        {semPasta > 0 && (
-          <ItemDaLateral
-            href="/hunts?pasta=sem"
-            ativo={selecionada === "sem"}
-            contagem={semPasta}
-            icone={<Inbox />}
-          >
-            Sem pasta
+        <GrupoDaLateral id="analyzers" titulo="Analyzers">
+          <ItemDaLateral href="/hunts" contagem={totalDeHunts} icone={<Layers />}>
+            Todas as hunts
           </ItemDaLateral>
-        )}
-      </div>
 
-      <div className="mt-auto flex flex-col gap-0.5 border-t pt-2.5">
-        {usuario && (
-          <span className="px-2.5 py-1.5 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{usuario}</span>
-          </span>
-        )}
-        <Link
-          href="/ferramentas"
-          className="rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          Ferramentas
-        </Link>
-        <Link
-          href="/config"
-          className="rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          Configurações
-        </Link>
-        <div className="flex items-center gap-1 px-1">
-          <ThemeSwitcher />
-          <LogoutButton />
+          <h3 className="mb-0.5 mt-2 flex items-center px-2.5 text-[11px] text-muted-foreground">
+            Pastas
+            <NovaPasta />
+          </h3>
+
+          {pastas.length === 0 && (
+            <p className="px-2.5 py-1 text-xs leading-relaxed text-muted-foreground">
+              Nenhuma pasta ainda. Crie uma para agrupar hunts por campanha e pôr uma meta.
+            </p>
+          )}
+
+          {pastas.map((p) => {
+            const meta =
+              p.meta_valor && p.meta_unidade
+                ? progressoDaMeta({ valor: p.meta_valor, unidade: p.meta_unidade }, p.profit, precoTc, p.hunts)
+                : null;
+            return (
+              <ItemDaLateral
+                key={p.id}
+                href={`/hunts?pasta=${p.id}`}
+                contagem={p.hunts}
+                barra={meta?.fracao}
+                acao={
+                  <>
+                    <OrdenarPastas ids={pastas.map((x) => x.id)} atual={p.id} />
+                    <EditarPasta pasta={p} />
+                  </>
+                }
+                icone={<Folder />}
+              >
+                {p.nome}
+              </ItemDaLateral>
+            );
+          })}
+
+          {semPasta > 0 && (
+            <ItemDaLateral href="/hunts?pasta=sem" contagem={semPasta} icone={<Inbox />}>
+              Sem pasta
+            </ItemDaLateral>
+          )}
+
+          <div className="mt-1">
+            <BotaoNovaHunt />
+          </div>
+        </GrupoDaLateral>
+
+        <GrupoDaLateral id="ferramentas" titulo="Ferramentas">
+          <EmBreve icone={<PackageSearch />}>Stash analyzer</EmBreve>
+        </GrupoDaLateral>
+
+        <GrupoDaLateral id="calculadoras" titulo="Calculadoras">
+          <ItemDaLateral href="/calculadoras/level" icone={<TrendingUp />}>
+            Prever level
+          </ItemDaLateral>
+        </GrupoDaLateral>
+
+        <div className="mt-auto flex flex-col gap-0.5 border-t pt-2.5">
+          {usuario && (
+            <span className="px-2.5 py-1.5 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{usuario}</span>
+            </span>
+          )}
+          <ItemDaLateral href="/config">Configurações</ItemDaLateral>
+          <div className="flex items-center gap-1 px-1">
+            <ThemeSwitcher />
+            <LogoutButton />
+          </div>
         </div>
-      </div>
       </aside>
+
+      <JanelaDeImportacao chars={chars} />
     </Gaveta>
+  );
+}
+
+/** Ferramenta anunciada e ainda não feita: aparece, mas não leva a lugar nenhum. */
+function EmBreve({ icone, children }: { icone: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span
+      aria-disabled
+      className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground/60"
+    >
+      <span aria-hidden className="shrink-0 [&>svg]:h-[14px] [&>svg]:w-[14px]">
+        {icone}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <span className="rounded-full border px-1.5 text-[10px] leading-4">em breve</span>
+    </span>
   );
 }
 
@@ -145,7 +160,6 @@ export function Lateral({
  */
 function ItemDaLateral({
   href,
-  ativo,
   contagem,
   barra,
   acao,
@@ -153,7 +167,6 @@ function ItemDaLateral({
   children,
 }: {
   href: string;
-  ativo: boolean;
   contagem?: number;
   barra?: number;
   /** Botão que vive dentro da linha (editar), revelado no hover. */
@@ -168,14 +181,11 @@ function ItemDaLateral({
   children: React.ReactNode;
 }) {
   return (
-    <Link
+    <LinkDaLateral
       href={href}
-      aria-current={ativo ? "page" : undefined}
-      className={`group/pasta block rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
-        ativo
-          ? "bg-primary/10 font-medium text-foreground shadow-[inset_2px_0_0_hsl(var(--primary))]"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground"
-      }`}
+      base="group/pasta block rounded-lg px-2.5 py-1.5 text-[13px] transition-colors"
+      seAtivo="bg-primary/10 font-medium text-foreground shadow-[inset_2px_0_0_hsl(var(--primary))]"
+      seInativo="text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <span className="flex w-full items-center gap-2.5">
         {/* `[&>svg]` dimensiona o ícone sem o chamador precisar saber disso:
@@ -202,6 +212,6 @@ function ItemDaLateral({
           />
         </span>
       )}
-    </Link>
+    </LinkDaLateral>
   );
 }

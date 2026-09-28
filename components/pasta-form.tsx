@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus } from "lucide-react";
-import { criarPasta, editarPasta, apagarPasta, type Resultado } from "@/app/hunts/pastas";
+import { criarPasta, editarPasta, apagarPasta, type Resultado } from "@/app/(app)/hunts/pastas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

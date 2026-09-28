@@ -9,12 +9,10 @@ import { separarLoot, NOMES_DE_MOEDA } from "@/lib/moedas";
 import { Caixa } from "@/components/caixa";
 import { DropsExtras, type DropNaTela } from "@/components/drops-extras";
 import { somarExtras } from "@/lib/extras";
-import { FormularioImportacao } from "./formulario";
 import { hasEnvVars } from "@/lib/utils";
 import { spriteDe } from "@/lib/sprites";
-import { usuarioDoEmail } from "@/lib/conta";
 import { Marca } from "@/components/marca";
-import { Lateral, type PastaNaLateral } from "@/components/lateral";
+import { BotaoImportar } from "@/components/importar-hunt";
 import { Analyzer } from "@/components/analyzer";
 import { FaixaDoDia } from "@/components/faixa-do-dia";
 import { MoverSessao } from "@/components/mover-sessao";
@@ -128,15 +126,12 @@ export default function PaginaHunts({
 /** O que a tela mostra antes de o banco responder. */
 function Esqueleto() {
   return (
-    <div className="flex">
-      <div className="h-dvh w-[238px] shrink-0 border-r bg-secondary/40 max-lg:hidden" />
-      <div className="flex-1 p-7">
+    <div className="p-7">
+      <div className="h-24 animate-pulse rounded-xl bg-muted" />
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
         <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
-          <div className="h-24 animate-pulse rounded-xl bg-muted" />
-          <div className="h-24 animate-pulse rounded-xl bg-muted" />
-          <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        </div>
+        <div className="h-24 animate-pulse rounded-xl bg-muted" />
+        <div className="h-24 animate-pulse rounded-xl bg-muted" />
       </div>
     </div>
   );
@@ -222,39 +217,9 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
   }[];
   const mundo = chars.map((c) => c.mundo).find(Boolean) ?? null;
 
-  // O formulário só oferece char cadastrado, e por isso precisa do id junto do
-  // nome — ele envia o id, não o texto (ver `app/hunts/formulario.tsx`).
-  const charsDoSeletor = chars
-    .map((c) => c.personagem)
-    .filter((p): p is { id: number; nome: string } => p !== null)
-    .map((p) => ({ id: p.id, nome: p.nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome));
   const precoTc =
     ((dadosConfig ?? []) as { mundo: string; preco_tc: number }[]).find((c) => c.mundo === mundo)
       ?.preco_tc ?? null;
-
-  // Agregado por pasta para a lateral. Feito aqui, em memória, e não com um
-  // `group by` no banco: as sessões já vieram, e uma segunda consulta para
-  // contar o que está na mão seria tráfego à toa.
-  const porPasta = new Map<number, { hunts: number; profit: number }>();
-  for (const s of todas) {
-    if (s.pasta_id === null) continue;
-    const a = porPasta.get(s.pasta_id) ?? { hunts: 0, profit: 0 };
-    a.hunts += 1;
-    a.profit += s.loot - s.supplies;
-    porPasta.set(s.pasta_id, a);
-  }
-
-  const pastasNaLateral: PastaNaLateral[] = pastas.map((p) => ({
-    id: p.id,
-    nome: p.nome,
-    hunts: porPasta.get(p.id)?.hunts ?? 0,
-    profit: porPasta.get(p.id)?.profit ?? 0,
-    meta_valor: p.meta_valor,
-    meta_unidade: p.meta_unidade,
-  }));
-
-  const semPasta = todas.filter((s) => s.pasta_id === null).length;
 
   // O recorte que a lateral pediu.
   const pastaAberta = selecionada && selecionada !== "sem" ? Number(selecionada) : null;
@@ -330,17 +295,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
   const progresso = meta ? progressoDaMeta(meta, resumo.profit, precoTc, resumo.hunts) : null;
 
   return (
-    <div className="flex">
-      <Lateral
-        pastas={pastasNaLateral}
-        selecionada={selecionada}
-        totalDeHunts={todas.length}
-        semPasta={semPasta}
-        precoTc={precoTc}
-        usuario={usuarioDoEmail(auth.user.email)}
-      />
-
-      <main className="min-w-0 flex-1 pb-20">
+      <main className="pb-20">
         {/* `pl-16` no mobile abre espaco para o botao da gaveta, que e `fixed`
             e nao ocupa lugar no fluxo. */}
         <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b bg-background/90 py-3 pl-16 pr-4 backdrop-blur lg:pl-6 lg:pr-6">
@@ -349,12 +304,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
             {linhas.length} {linhas.length === 1 ? "hunt" : "hunts"}
           </span>
           <div className="ml-auto flex items-center gap-2">
-            <a
-              href="#importar"
-              className="rounded-lg bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-[filter] hover:brightness-110"
-            >
-              Importar sessão
-            </a>
+            <BotaoImportar />
           </div>
         </header>
 
@@ -367,7 +317,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
                 {selecionada ? "Nenhuma hunt nesta pasta ainda." : "Nenhuma hunt importada ainda."}
               </p>
               <p className="mt-1 text-muted-foreground">
-                Cole o texto do Hunt Analyser abaixo — o app calcula o resto.
+                Clique em “Importar sessão” e cole o texto do Hunt Analyser — o app calcula o resto.
               </p>
             </Aviso>
           ) : (
@@ -593,22 +543,12 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
             </>
           )}
 
-          <section id="importar" className="entra scroll-mt-20 rounded-xl border bg-card p-5 sm:p-6">
-            <h2 className="text-sm font-medium">Importar sessão</h2>
-            <p className="mb-4 mt-0.5 text-xs text-muted-foreground">
-              Cole o que o Hunt Analyser copiou. As taxas por hora do jogo são ignoradas — os
-              números são recalculados a partir dos totais.
-            </p>
-            <FormularioImportacao chars={charsDoSeletor} />
-          </section>
-
           <footer className="text-xs leading-relaxed text-muted-foreground">
             Tibia e todos os produtos relacionados são © CipSoft GmbH. Dados de tibia.com e do
             TibiaWiki.
           </footer>
         </div>
       </main>
-    </div>
   );
 }
 

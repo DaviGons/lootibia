@@ -3,8 +3,8 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Gem, Plus } from "lucide-react";
-import { adicionarDropExtra, apagarDropExtra } from "@/app/hunts/extras";
-import type { Resultado } from "@/app/hunts/pastas";
+import { adicionarDropExtra, apagarDropExtra } from "@/app/(app)/hunts/extras";
+import type { Resultado } from "@/app/(app)/hunts/pastas";
 import type { TotalDeExtras } from "@/lib/extras";
 import { tituloDeItem } from "@/lib/nomesDeItem";
 import type { UnidadeDaMeta } from "@/lib/meta";

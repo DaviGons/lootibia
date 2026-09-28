@@ -3,8 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { usuarioDoEmail } from "@/lib/conta";
-import { Marca } from "@/components/marca";
-import { removerPersonagem } from "@/app/hunts/pastas";
+import { removerPersonagem } from "@/app/(app)/hunts/pastas";
 import { CadastrarPersonagem, PrecoDoMundo } from "./formularios";
 
 // Mesma razão da /hunts: ler `cookies()` fora de <Suspense> é erro de build
@@ -26,19 +25,8 @@ interface CharLigado {
 
 export default function PaginaConfig() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
-      <div className="mb-10 flex items-center justify-between gap-4">
-        <Link href="/hunts" className="text-foreground" aria-label="lootibia — voltar">
-          <Marca altura={22} />
-        </Link>
-        <Link
-          href="/hunts"
-          className="rounded-lg border px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          Voltar ao painel
-        </Link>
-      </div>
-
+    // `pt-16` no celular abre espaço para o botão do menu, que é `fixed`.
+    <main className="mx-auto w-full max-w-3xl px-4 pb-10 pt-16 sm:px-6 sm:pb-14 lg:pt-14">
       <h1 className="mb-8 text-2xl font-semibold tracking-tight">Configurações</h1>
 
       <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>

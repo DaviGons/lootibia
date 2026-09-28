@@ -66,7 +66,9 @@ export function Gaveta({ children }: { children: React.ReactNode }) {
       */}
       <div
         onClick={(e) => {
-          if ((e.target as HTMLElement).closest("a")) setAberta(false);
+          // `data-fecha-gaveta`: botão que não é link mas leva a outro lugar,
+          // como o que abre a janela de importação.
+          if ((e.target as HTMLElement).closest("a, [data-fecha-gaveta]")) setAberta(false);
         }}
         className={`z-50 transition-transform duration-200 max-lg:fixed max-lg:inset-y-0 max-lg:left-0 ${
           aberta ? "max-lg:translate-x-0" : "max-lg:-translate-x-full"
