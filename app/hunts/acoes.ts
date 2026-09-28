@@ -40,9 +40,12 @@ export async function importarSessao(
   await guardarFuso(supabase, auth.user.id, fuso);
 
   // O seletor só mostra char do usuário, mas o `select` chega por `FormData` e
-  // isso é o cliente falando. A RLS de `personagem` é `using (true)` — vocabulário
-  // compartilhado, todo autenticado lê —, então ela NÃO recusaria o id de um char
-  // alheio. Quem recusa é esta consulta, que passa por `usuario_personagem`.
+  // isso é o cliente falando. A RLS de `personagem` é `using (true)` —
+  // vocabulário compartilhado, todo autenticado lê —, então ela NÃO recusa o id
+  // de um char alheio. Quem recusa, desde o 0005, é o gatilho
+  // `sessao_confere_personagem` (diretriz 57): esta consulta não é fronteira,
+  // porque o token do usuário grava em `sessao` direto pelo PostgREST. Ela
+  // existe pela frase — o char desvinculado noutra aba, com o seletor velho.
   if (personagemId !== null) {
     const { data: meu } = await supabase
       .from("usuario_personagem")
@@ -74,6 +77,7 @@ export async function importarSessao(
 
 export async function apagarSessao(formData: FormData): Promise<void> {
   const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) return;
   const supabase = await createClient();
   await supabase.from("sessao").delete().eq("id", id);
   revalidatePath("/hunts");

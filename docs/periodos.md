@@ -1,8 +1,9 @@
 # Calendário do jogo: dias e semanas
 
-> **EM USO.** [`lib/periodo.ts`](../lib/periodo.ts) é usado pela tela `/hunts` para agrupar sessões
-> por semana, e a mesma regra está replicada em SQL na view `sessao_periodo`
-> (`supabase/migrations/0001_schema.sql`). Escrito em 2026-09-16.
+> **EM USO.** [`lib/periodo.ts`](../lib/periodo.ts) deixou de agrupar a tela por semana em
+> 2026-09-21 — quem organiza agora é a pasta — e hoje sustenta a cidade do Rashid (diretriz 42). A
+> mesma regra está replicada em SQL na view `sessao_periodo`, na versão recriada em
+> `supabase/migrations/0003_pastas_e_metas.sql`. Escrito em 2026-09-16.
 
 ## Por que isto é um módulo, e não `new Date()`
 

@@ -10,15 +10,18 @@ import { CadastrarPersonagem, PrecoDoMundo } from "./formularios";
 // Mesma razão da /hunts: ler `cookies()` fora de <Suspense> é erro de build
 // com Cache Components (diretriz 32).
 
+/**
+ * O vínculo, com o que a TibiaData respondeu para ESTE usuário.
+ *
+ * Mundo, vocação e level moram em `usuario_personagem` desde o 0005: em
+ * `personagem`, que é compartilhado, qualquer conta podia alterá-los.
+ */
 interface CharLigado {
-  personagem: {
-    id: number;
-    nome: string;
-    mundo: string | null;
-    vocacao: string | null;
-    nivel: number | null;
-    visto_em: string | null;
-  } | null;
+  mundo: string | null;
+  vocacao: string | null;
+  nivel: number | null;
+  visto_em: string | null;
+  personagem: { id: number; nome: string } | null;
 }
 
 export default function PaginaConfig() {
@@ -82,13 +85,20 @@ async function Conteudo() {
   const [{ data: dadosChars }, { data: dadosConfig }] = await Promise.all([
     supabase
       .from("usuario_personagem")
-      .select("personagem(id, nome, mundo, vocacao, nivel, visto_em)"),
+      .select("mundo, vocacao, nivel, visto_em, personagem(id, nome)"),
     supabase.from("config_mundo").select("mundo, preco_tc"),
   ]);
 
   const chars = ((dadosChars ?? []) as unknown as CharLigado[])
-    .map((c) => c.personagem)
-    .filter((p): p is NonNullable<CharLigado["personagem"]> => p !== null)
+    .filter((c): c is CharLigado & { personagem: { id: number; nome: string } } => c.personagem !== null)
+    .map((c) => ({
+      id: c.personagem.id,
+      nome: c.personagem.nome,
+      mundo: c.mundo,
+      vocacao: c.vocacao,
+      nivel: c.nivel,
+      visto_em: c.visto_em,
+    }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   const precos = new Map(

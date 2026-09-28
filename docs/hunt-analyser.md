@@ -2,7 +2,9 @@
 
 > **EM USO.** [`lib/huntSession.ts`](../lib/huntSession.ts) e
 > [`lib/huntAgregado.ts`](../lib/huntAgregado.ts) alimentam a tela `/hunts`. O schema está em
-> `supabase/migrations/0001_schema.sql` e **ainda não foi aplicado num projeto real**.
+> `supabase/migrations/`: `0001` a `0004` aplicados e conferidos no projeto real; `0005` e `0006`
+> escritos em 2026-09-27, com aplicação pendente (ordem no `AGENTS.md`). O parser ganhou teto de
+> tamanho e um regex de data sem backtracking — diretriz 55.
 
 ## O que o app faz
 

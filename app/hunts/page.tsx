@@ -10,7 +10,6 @@ import { Caixa } from "@/components/caixa";
 import { DropsExtras, type DropNaTela } from "@/components/drops-extras";
 import { somarExtras } from "@/lib/extras";
 import { FormularioImportacao } from "./formulario";
-import { apagarSessao } from "./acoes";
 import { hasEnvVars } from "@/lib/utils";
 import { spriteDe } from "@/lib/sprites";
 import { usuarioDoEmail } from "@/lib/conta";
@@ -19,6 +18,7 @@ import { Lateral, type PastaNaLateral } from "@/components/lateral";
 import { Analyzer } from "@/components/analyzer";
 import { FaixaDoDia } from "@/components/faixa-do-dia";
 import { MoverSessao } from "@/components/mover-sessao";
+import { ApagarSessao } from "@/components/apagar-sessao";
 
 // Next 16 com Cache Components: ler `cookies()` (o que o cliente Supabase faz)
 // e `searchParams` fora de um <Suspense> é erro de build. A tela inteira depende
@@ -195,7 +195,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
         .limit(500),
       supabase.from("pasta").select("id, nome, meta_valor, meta_unidade").order("ordem").order("id"),
       supabase.from("config_mundo").select("mundo, preco_tc"),
-      supabase.from("usuario_personagem").select("personagem(id, nome, mundo)"),
+      supabase.from("usuario_personagem").select("mundo, personagem(id, nome)"),
     ]);
 
   if (error) {
@@ -214,16 +214,19 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
 
   const todas = (dadosSessoes ?? []) as unknown as LinhaSessao[];
   const pastas = (dadosPastas ?? []) as LinhaPasta[];
+  // O mundo vem do VÍNCULO, que só o dono escreve (0005) — e não de
+  // `personagem`, que é compartilhado. É ele que escolhe o preço da TC.
   const chars = (dadosChars ?? []) as unknown as {
-    personagem: { id: number; nome: string; mundo: string | null } | null;
+    mundo: string | null;
+    personagem: { id: number; nome: string } | null;
   }[];
-  const mundo = chars.map((c) => c.personagem?.mundo).find(Boolean) ?? null;
+  const mundo = chars.map((c) => c.mundo).find(Boolean) ?? null;
 
   // O formulário só oferece char cadastrado, e por isso precisa do id junto do
   // nome — ele envia o id, não o texto (ver `app/hunts/formulario.tsx`).
   const charsDoSeletor = chars
     .map((c) => c.personagem)
-    .filter((p): p is { id: number; nome: string; mundo: string | null } => p !== null)
+    .filter((p): p is { id: number; nome: string } => p !== null)
     .map((p) => ({ id: p.id, nome: p.nome }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
   const precoTc =
@@ -577,12 +580,7 @@ async function App({ searchParams }: { searchParams: Promise<{ pasta?: string }>
                             <td className="px-4 py-2.5">
                               <span className="flex items-center justify-end gap-1">
                                 <Analyzer sessaoId={l.id} spot={l.spot?.nome ?? null} />
-                                <form action={apagarSessao}>
-                                  <input type="hidden" name="id" value={l.id} />
-                                  <button className="rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100">
-                                    apagar
-                                  </button>
-                                </form>
+                                <ApagarSessao sessaoId={l.id} />
                               </span>
                             </td>
                           </tr>
