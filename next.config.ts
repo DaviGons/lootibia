@@ -37,7 +37,12 @@ const nextConfig: NextConfig = {
   // de uma pagina: no Next 16 isso impede a validacao de navegacao instantanea
   // e enche o log de "Could not validate `instant`" a cada requisicao.
   async redirects() {
-    return [{ source: "/", destination: "/hunts", permanent: false }];
+    return [
+      { source: "/", destination: "/hunts", permanent: false },
+      // O Prever level nasceu em /ferramentas/level e mudou para Calculadoras
+      // em 2026-09-28, no mesmo dia; quem guardou o link cai no lugar certo.
+      { source: "/ferramentas/level", destination: "/calculadoras/level", permanent: true },
+    ];
   },
 };
 

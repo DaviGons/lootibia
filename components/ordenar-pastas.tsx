@@ -2,7 +2,7 @@
 
 import { useOptimistic, useTransition } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { reordenarPastas } from "@/app/hunts/pastas";
+import { reordenarPastas } from "@/app/(app)/hunts/pastas";
 
 /**
  * Sobe e desce uma pasta na lista.

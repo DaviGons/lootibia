@@ -38,7 +38,12 @@ export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium">Personagem</span>
+          <span className="flex items-baseline justify-between text-xs font-medium">
+            Personagem
+            <Link href="/config" className="font-normal text-primary underline-offset-4 hover:underline">
+              {chars.length === 0 ? "cadastrar" : "gerenciar"}
+            </Link>
+          </span>
           <select name="personagem_id" disabled={chars.length === 0} className={SELETOR}>
             <option value="">{chars.length === 0 ? "Nenhum cadastrado" : "Sem personagem"}</option>
             {chars.map((c) => (
@@ -47,30 +52,13 @@ export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
               </option>
             ))}
           </select>
-          <span className="text-xs text-muted-foreground">
-            Opcional. Serve para separar os números por char.{" "}
-            {chars.length === 0 ? (
-              <>
-                <Link href="/config" className="text-primary underline underline-offset-4">
-                  Cadastre um
-                </Link>{" "}
-                para usar este campo.
-              </>
-            ) : (
-              <Link href="/config" className="text-primary underline underline-offset-4">
-                Gerenciar
-              </Link>
-            )}
-          </span>
         </label>
 
+        {/* O Hunt Analyser não informa o local: sem o spot, a sessão não entra
+            em "hunts mais caçadas". */}
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium">Nome do spot</span>
+          <span className="text-xs font-medium">Spot</span>
           <input name="rotulo" placeholder="Asura Palace" className={CAMPO} />
-          <span className="text-xs text-muted-foreground">
-            O Hunt Analyser não informa o local — sem isto, a sessão não entra em “hunts mais
-            caçadas”.
-          </span>
         </label>
       </div>
 
@@ -78,7 +66,7 @@ export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
         <span className="text-xs font-medium">Texto do Hunt Analyser</span>
         <textarea
           name="texto"
-          rows={10}
+          rows={8}
           maxLength={MAX_TEXTO}
           spellCheck={false}
           placeholder={"Session data: From 2026-09-15, 19:34:12 to 2026-09-15, 21:25:10\nSession: 01:50h\nRaw XP Gain: 7,051,729\n…"}
@@ -97,7 +85,7 @@ export function FormularioImportacao({ chars }: { chars: CharDoSeletor[] }) {
           )}
           {enviando ? "Importando…" : "Importar sessão"}
         </button>
-        <span className="text-xs text-muted-foreground">fuso detectado: {fuso}</span>
+        <span className="text-[11px] text-muted-foreground">fuso: {fuso}</span>
       </div>
 
       {estado && (

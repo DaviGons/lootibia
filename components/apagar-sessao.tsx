@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { apagarSessao } from "@/app/hunts/acoes";
+import { apagarSessao } from "@/app/(app)/hunts/acoes";
 
 /**
  * Apagar uma hunt pede confirmação, na própria linha.

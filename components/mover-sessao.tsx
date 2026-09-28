@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useTransition } from "react";
-import { moverSessao } from "@/app/hunts/pastas";
+import { moverSessao } from "@/app/(app)/hunts/pastas";
 
 /**
  * Arquiva a sessão numa pasta, na própria linha da tabela.

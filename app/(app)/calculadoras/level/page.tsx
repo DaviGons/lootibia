@@ -3,7 +3,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { DIAS_RECENTES, horasPorSemana, somarRitmo, type SessaoDeXp } from "@/lib/level";
-import { Topo } from "../topo";
 import { PrevisaoDeLevel, type CharDaPrevisao } from "./previsao";
 
 /**
@@ -16,8 +15,8 @@ const LIMITE_SESSOES = 1000;
 
 export default function PaginaPreverLevel() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
-      <Topo voltarPara="/ferramentas" rotulo="Ferramentas" />
+    // `pt-16` no celular abre espaço para o botão do menu, que é `fixed`.
+    <main className="mx-auto w-full max-w-3xl px-4 pb-10 pt-16 sm:px-6 sm:pb-14 lg:pt-14">
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">Prever level</h1>
       <p className="mb-8 text-sm text-muted-foreground">
         O ritmo vem das suas hunts importadas: XP somada dividida pelas horas somadas.

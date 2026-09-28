@@ -5,7 +5,7 @@ import { ScrollText } from "lucide-react";
 import { spriteDe } from "@/lib/sprites";
 import { separarLoot } from "@/lib/moedas";
 import { Caixa } from "@/components/caixa";
-import { detalheDaSessao, type DetalheDaSessao } from "@/app/hunts/detalhe";
+import { detalheDaSessao, type DetalheDaSessao } from "@/app/(app)/hunts/detalhe";
 
 const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 

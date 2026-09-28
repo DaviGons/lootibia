@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { cadastrarPersonagem, salvarPrecoTc, type Resultado } from "@/app/hunts/pastas";
+import { cadastrarPersonagem, salvarPrecoTc, type Resultado } from "@/app/(app)/hunts/pastas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

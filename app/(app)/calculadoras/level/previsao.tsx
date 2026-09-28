@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { cadastrarPersonagem, type Resultado } from "@/app/hunts/pastas";
+import { cadastrarPersonagem, type Resultado } from "@/app/(app)/hunts/pastas";
 import {
   HORAS_NA_SEMANA,
   LEVEL_MAXIMO,
