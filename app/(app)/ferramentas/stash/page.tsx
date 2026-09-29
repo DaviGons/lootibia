@@ -10,7 +10,7 @@ export default function PaginaStash() {
     <main className="mx-auto w-full max-w-3xl px-4 pb-10 pt-16 sm:px-6 sm:pb-14 lg:pt-14">
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">Stash analyzer</h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Mande prints do seu Supply Stash e veja o que serve para Delivery Task, para imbuement e
+        Mande prints do seu Stash e veja o que serve para Delivery Task, para imbuement e
         quanto tudo vale no NPC.
       </p>
       <Analisador />

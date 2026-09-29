@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { ATLAS, ITENS_DO_STASH } from "./dados/stash.ts";
 import {
+  BRILHO_DA_MOLDURA,
   FUNDO_DO_SLOT,
   LADO,
   acharTitulo,
@@ -40,24 +41,27 @@ const sorteio = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) /
 /**
  * Slot vazio: o fundo medido do cliente, com ±4 de ruído (a parte central da
  * tabela é estimada, e o teste não pode depender de ela ser exata), numa
- * margem cinza de 4 px.
+ * margem cinza de 4 px. `moldura` é a cor dela; o fundo vem do modelo
+ * `cinza + brilho × (F − 131)` que `lib/stash.ts` usa.
  */
-function slotVazio(): Rgba {
+function slotVazio(moldura: readonly number[] = [131, 131, 131]): Rgba {
   const L = 40;
   const dados = new Uint8ClampedArray(L * L * 4);
   for (let i = 0; i < L * L; i++) dados.set([72, 72, 73, 255], i * 4);
   for (let y = 0; y < LADO; y++) {
     for (let x = 0; x < LADO; x++) {
-      const v = FUNDO_DO_SLOT[y * LADO + x] + Math.floor(sorteio() * 9) - 4;
-      dados.set([v, v, v, 255], ((4 + y) * L + 4 + x) * 4);
+      const j = y * LADO + x;
+      const v = FUNDO_DO_SLOT[j] + Math.floor(sorteio() * 9) - 4;
+      const cor = moldura.map((f) => v + BRILHO_DA_MOLDURA[j] * (f - 131));
+      dados.set([...cor, 255], ((4 + y) * L + 4 + x) * 4);
     }
   }
   return { largura: L, altura: L, dados };
 }
 
 /** Cola o sprite `s` com alpha no slot, na posição (4+dx, 4+dy), e desenha um "1" no canto. */
-function comSprite(s: number, dx: number, dy: number): Rgba {
-  const img = slotVazio();
+function comSprite(s: number, dx: number, dy: number, moldura?: readonly number[]): Rgba {
+  const img = slotVazio(moldura);
   const ox = (s % ATLAS.colunas) * LADO;
   const oy = Math.floor(s / ATLAS.colunas) * LADO;
   for (let y = 0; y < LADO; y++) {
@@ -115,6 +119,26 @@ ok("menos de 30 ms por slot", ms < 30, true);
 
 console.log("== slot vazio não vira item");
 ok("fundo liso", reconhecerSlot(slotVazio(), 4, 4, sprites), null);
+
+// Verde e azul foram medidos; roxo e dourado nunca apareceram num print, e o
+// motor tem de lidar com eles pelo mesmo modelo, lendo a cor na moldura.
+const MOLDURAS: Record<string, number[]> = {
+  verde: [35, 137, 35],
+  azul: [45, 116, 169],
+  roxo: [148, 60, 196],
+  dourado: [214, 168, 40],
+};
+console.log("== molduras coloridas, 60 sprites sorteados em cada");
+for (const [cor, F] of Object.entries(MOLDURAS)) {
+  let bons = 0;
+  for (let k = 0; k < 60; k++) {
+    const s = Math.floor(sorteio() * donos.length);
+    const r = reconhecerSlot(comSprite(s, 0, 0, F), 4, 4, sprites);
+    if (r && (r.item === donos[s] || ITENS_DO_STASH[r.item][5].some((t) => mesmoDesenho(t, s)))) bons++;
+  }
+  ok(`moldura ${cor}: 98% ou mais certos`, bons >= 59, true);
+  ok(`moldura ${cor}: vazio não vira item`, reconhecerSlot(slotVazio(F), 4, 4, sprites), null);
+}
 
 console.log("== fundo do slot contra o print");
 const print = await sharp("test/fixtures/stash/2026-09-28-stash.png").ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -244,6 +268,37 @@ function semItemErrado(l: ReturnType<typeof lerPrint>, parciais: boolean) {
   ok("pé: nenhum cortado vira item errado", semItemErrado(l, true), true);
   ok("pé: sem número, sem quantidade", cortados.map((s) => s.quantidade.valor), [null, null, null]);
   console.log(`     pé: ${cortados.filter((s) => s.item !== null).length} de 3 cortados reconhecidos`);
+}
+
+console.log("== print com molduras coloridas e itens não empilháveis (2026-09-29)");
+{
+  // A regra da 14.10: o Stash aceita arma, escudo, anel... O primeiro print a
+  // mostrar isso saiu com metade dos slots sem item — moldura verde e azul não
+  // eram achadas, e a base só tinha empilháveis. O 7 e o 8 também são daqui.
+  const p = await sharp("test/fixtures/stash/2026-09-29-stash-molduras.png").ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const l = lerPrint({ largura: p.info.width, altura: p.info.height, dados: p.data }, sprites);
+  const esperado = [
+    ["Beastslayer Axe", 17], ["Blue Crystal Splinter", 35], ["Broken Dream", 15], ["Brown Crystal Splinter", 185],
+    ["Brown Mushroom", 3088], ["Butcher's Axe", 2], ["Cluster of Solace", 1], ["Cobra Crest", 157],
+    ["Crown Shield", 3], ["Cyan Crystal Fragment", 20], ["Diamond Sceptre", 2], ["Emerald Bangle", 9],
+    ["Empty Potion Flask (Large)", 3109], ["Fire Sword", 3], ["Gemmed Figurine", 14],
+    ["Giant Shimmering Pearl (Brown)", 18], ["Glorious Axe", 5], ["Gold Ingot", 38], ["Green Crystal Fragment", 28],
+    ["Green Crystal Shard", 60], ["Green Gem", 8], ["Guardian Shield", 5], ["Haunted Blade", 3],
+    ["Mercenary Sword", 11], ["Onyx Chip", 7], ["Onyx Flail", 1], ["Opal", 806], ["Red Crystal Fragment", 15],
+    ["Red Gem", 27], ["Red Piece of Cloth", 8], ["Ring of Healing", 10], ["Ring of Red Plasma", 1],
+    ["Sacred Tree Amulet", 10], ["Shadow Sceptre", 7], ["Silencer Claws", 27], ["Small Emerald", 353],
+    ["Spellbook of Mind Control", 1], ["Spiked Squelcher", 4], ["Springsprout Rod", 3], ["Stealth Ring", 2],
+    ["Steel Boots", 1], ["Stone Skin Amulet", 1], ["Supreme Health Potion", 265], ["Terra Boots", 31],
+    ["Terra Hood", 32], ["Terra Legs", 1], ["Terra Mantle", 1], ["Terra Rod", 71], ["Titan Axe", 1],
+    ["Tower Shield", 1], ["Traditional Sai", 3], ["Ultimate Health Potion", 1179], ["Underworld Rod", 1],
+    ["Violet Crystal Shard", 10], ["Violet Gem", 3], ["Wand of Starstorm", 4], ["Yellow Gem", 5],
+  ];
+  const lidos = nomesEQuantidades(l);
+  ok("57 slots achados", lidos.length, 57);
+  const errados = esperado.filter((e, i) => JSON.stringify(lidos[i]) !== JSON.stringify(e));
+  ok("os 57 itens e quantidades, na ordem", errados.map((e) => `${e[0]} ${e[1]} -> ${JSON.stringify(lidos[esperado.indexOf(e)])}`), []);
+  const opal = ITENS_DO_STASH.find((it) => it[0] === "Opal")!;
+  ok("Opal: 500 gp no NPC, do cliente", opal[1], 500);
 }
 
 console.log("== juntar prints");
