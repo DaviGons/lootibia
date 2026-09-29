@@ -251,6 +251,15 @@ Todos rodam com `node --experimental-strip-types --env-file=.env.local scripts/<
 - [`docs/stack.md`](docs/stack.md) — limites reais dos planos gratuitos e como o projeto cabe neles.
 - [`docs/periodos.md`](docs/periodos.md) — o calendário do jogo (server save, horário de Berlim).
 - [`docs/decisoes.md`](docs/decisoes.md) — registro de decisões.
+- [`docs/trabalho/`](docs/trabalho/) — o trabalho acadêmico sobre o projeto, em PDF e em Word.
+
+## Trabalho acadêmico
+
+O lootibia é o trabalho de Estágio Supervisionado do curso de Ciência da Computação do Centro
+Universitário Padre Anchieta (2026), cuja proposta era usar a inteligência artificial de forma
+intensiva para resolver uma dor real. O trabalho escrito, nas normas da ABNT, explica o projeto, a
+dor que ele atende e como a IA foi usada: [PDF](docs/trabalho/lootibia-trabalho.pdf) ·
+[Word](docs/trabalho/lootibia-trabalho.docx).
 
 ## Créditos
 
