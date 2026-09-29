@@ -1,5 +1,5 @@
 /**
- * Reconhecimento de itens num print do Supply Stash.
+ * Reconhecimento de itens num print do Stash (o antigo Supply Stash).
  *
  * Funções puras sobre RGBA: nada de DOM, canvas ou rede. Quem chama (o Web
  * Worker da página) entrega os pixels; os testes entregam pixels sintéticos.
@@ -21,6 +21,16 @@
  *
  * O canto de baixo à direita, onde o jogo escreve a quantidade, não entra em
  * nenhuma das duas: o número por cima do sprite estragaria a comparação.
+ *
+ * ## A moldura colorida
+ *
+ * O cliente pode pintar a moldura do slot pela faixa de valor do item (cinza,
+ * verde, azul, roxo, dourado — os limites são do jogador). A cor escorre para
+ * dentro do slot num degradê, e o fundo muda junto. `FUNDO_DO_SLOT` é o fundo
+ * da moldura cinza; o de qualquer outra cor F sai dele por
+ * `fundo = cinza + brilho × (F − 131)`, com o brilho medido por pixel
+ * (`BRILHO_DA_MOLDURA`). A cor de cada slot é lida na própria moldura, então
+ * cor que nenhum print mostrou ainda funciona do mesmo jeito.
  */
 
 export interface Rgba {
@@ -127,6 +137,81 @@ export const FUNDO_DO_SLOT: readonly number[] = [
   130, 131, 131, 130, 131, 130, 131, 132, 131, 130, 131, 131, 131, 131, 131, 131, 130, 131, 130, 131, 130, 131, 131, 131, 130, 131, 129, 131, 131, 130, 129, 131
 ];
 
+/** O cinza da moldura na tabela acima: a referência de `BRILHO_DA_MOLDURA`. */
+const CINZA_DA_MOLDURA = 131;
+
+/**
+ * Quanto da cor da moldura chega a cada pixel do slot (1 = a própria moldura,
+ * 0 = nada), pela distância até a borda na horizontal e na vertical, de 0 a 6
+ * (6 = "6 ou mais"). Simétrica. Fora dos cantos só conta a distância menor.
+ *
+ * Medido no print de 2026-09-29 (`test/fixtures/stash/`): nos 23 slots verdes e
+ * 12 azuis, pixel sem sprite, `(slot − cinza) / (F − 131)` pelo mínimo
+ * quadrado dos três canais; média por classe, de 91 a 5.559 pixels cada. O
+ * resíduo do modelo fica em ±4 tons, e a partir da distância 6 o brilho é zero.
+ */
+const BRILHO_POR_DISTANCIA: readonly (readonly number[])[] = [
+  [1, 1, 1, 1, 1, 1, 1],
+  [1, 0.828, 0.737, 0.656, 0.584, 0.527, 0.512],
+  [1, 0.737, 0.604, 0.491, 0.418, 0.361, 0.344],
+  [1, 0.656, 0.491, 0.372, 0.292, 0.23, 0.203],
+  [1, 0.584, 0.418, 0.292, 0.191, 0.13, 0.1],
+  [1, 0.527, 0.361, 0.23, 0.13, 0.069, 0.026],
+  [1, 0.512, 0.344, 0.203, 0.1, 0.026, 0],
+];
+
+/** `BRILHO_POR_DISTANCIA` aberto em 32×32. */
+export const BRILHO_DA_MOLDURA: Float32Array = (() => {
+  const t = new Float32Array(LADO * LADO);
+  for (let y = 0; y < LADO; y++) {
+    for (let x = 0; x < LADO; x++) {
+      const u = Math.min(6, x, LADO - 1 - x);
+      const v = Math.min(6, y, LADO - 1 - y);
+      t[y * LADO + x] = BRILHO_POR_DISTANCIA[u][v];
+    }
+  }
+  return t;
+})();
+
+/**
+ * Pixel de moldura, de qualquer cor: algum canal acima de 100. O que separa os
+ * slots é uma linha quase preta, e o fundo perto da moldura já é mais escuro.
+ * A primeira versão pedia luz média acima de 100 e perdia a moldura verde
+ * (35, 137, 35 → 69) — um print com 30 slots verdes saiu com metade dos itens.
+ */
+function ehMoldura(d: Uint8ClampedArray | Uint8Array, i: number): boolean {
+  return Math.max(d[i], d[i + 1], d[i + 2]) > 100;
+}
+
+/** Fração mínima da moldura que tem de aparecer para o slot contar. */
+const MOLDURA_A_VISTA = 0.6;
+
+/**
+ * A cor da moldura do slot, como diferença para o cinza: `[F − 131]` por canal.
+ * Mediana da linha de cima e da coluna da esquerda, na parte à vista — o
+ * sprite às vezes invade a moldura, e o número passa por cima do pé da
+ * direita, que fica de fora.
+ */
+function desvioDaMoldura(img: Rgba, sx: number, sy: number, y0: number, y1: number): [number, number, number] {
+  const W = img.largura;
+  const d = img.dados;
+  const canais: number[][] = [[], [], []];
+  const junta = (x: number, y: number) => {
+    if (x < 0 || x >= W || y < y0 || y > y1 || y >= img.altura) return;
+    const i = (y * W + x) * 4;
+    for (let c = 0; c < 3; c++) canais[c].push(d[i + c]);
+  };
+  for (let k = 0; k < LADO; k++) {
+    junta(sx + k, sy);
+    junta(sx, sy + k);
+  }
+  if (canais[0].length === 0) return [0, 0, 0];
+  return canais.map((v) => {
+    v.sort((a, b) => a - b);
+    return v[v.length >> 1] - CINZA_DA_MOLDURA;
+  }) as [number, number, number];
+}
+
 function ehZonaDoNumero(_x: number, y: number): boolean {
   return y >= LINHA_DO_NUMERO;
 }
@@ -156,6 +241,12 @@ export interface SpritePreparado {
    * ficava de fora — 130 de 300 no teste.
    */
   celulas: Float32Array;
+  /**
+   * Por célula, a média de `BRILHO_DA_MOLDURA` nos pixels que o sprite NÃO
+   * cobre: com a moldura de desvio `m`, a célula passa a valer
+   * `celulas + m × brilho`. Conta exata, sem preparar uma grade por cor.
+   */
+  brilho: Float32Array;
 }
 
 /**
@@ -171,6 +262,7 @@ export function prepararSprites(atlas: Rgba, colunas: number, donos: readonly nu
     const oy = Math.floor(s / colunas) * LADO;
     const pontos: number[] = [];
     const celulas = new Float32Array(CELULAS * CELULAS * 3);
+    const brilho = new Float32Array(CELULAS * CELULAS);
     for (let y = 0; y < LADO; y++) {
       for (let x = 0; x < LADO; x++) {
         const i = ((oy + y) * atlas.largura + ox + x) * 4;
@@ -181,6 +273,7 @@ export function prepararSprites(atlas: Rgba, colunas: number, donos: readonly nu
         celulas[c] += (cobre ? atlas.dados[i] : f) / area;
         celulas[c + 1] += (cobre ? atlas.dados[i + 1] : f) / area;
         celulas[c + 2] += (cobre ? atlas.dados[i + 2] : f) / area;
+        if (!cobre) brilho[c / 3] += BRILHO_DA_MOLDURA[y * LADO + x] / area;
         if (!cobre) continue;
         // A borda de 1 px do slot é a moldura clara do cliente, não o sprite.
         if (x > 0 && y > 0 && x < LADO - 1 && y < LADO - 1) pontos.push(x, y, atlas.dados[i], atlas.dados[i + 1], atlas.dados[i + 2]);
@@ -188,7 +281,7 @@ export function prepararSprites(atlas: Rgba, colunas: number, donos: readonly nu
     }
     // Poucos pontos casam com qualquer fundo: sprite assim não é confiável.
     if (pontos.length / 5 < MINIMO_DE_PONTOS) continue;
-    out.push({ item: donos[s], pontos: Int16Array.from(pontos), celulas });
+    out.push({ item: donos[s], pontos: Int16Array.from(pontos), celulas, brilho });
   }
   return out;
 }
@@ -218,9 +311,11 @@ export function reconhecerSlot(
   const H = Math.min(img.altura, visivel.y1 + 1);
   const Y0 = Math.max(0, visivel.y0);
   const px = img.dados;
+  const m = desvioDaMoldura(img, sx, sy, Y0, H - 1);
 
   // 1. Filtro: a grade do slot contra a grade que cada sprite produziria
-  //    sobre o fundo do slot. Guarda os CANDIDATOS de menor distância.
+  //    sobre o fundo do slot, na cor da moldura dele. Guarda os CANDIDATOS de
+  //    menor distância.
   const grade = new Float32Array(CELULAS * CELULAS * 3);
   for (let y = 0; y < LADO; y++) {
     for (let x = 0; x < LADO; x++) {
@@ -245,10 +340,11 @@ export function reconhecerSlot(
   let pior = Infinity;
   for (let s = 0; s < sprites.length; s++) {
     const cel = sprites[s].celulas;
+    const bri = sprites[s].brilho;
     let d = 0;
     for (let c = 0; c < CELULAS * CELULAS; c++) {
       if (!celulaVisivel[c]) continue;
-      for (let k = 0; k < 3; k++) d += (grade[c * 3 + k] - cel[c * 3 + k]) ** 2;
+      for (let k = 0; k < 3; k++) d += (grade[c * 3 + k] - cel[c * 3 + k] - m[k] * bri[c]) ** 2;
       if (d > pior) break;
     }
     if (melhores.length < CANDIDATOS) {
@@ -322,11 +418,13 @@ export function reconhecerSlot(
     if (x < 0 || y < Y0 || x >= W || y >= H) continue;
     const i = (y * W + x) * 4;
     if (p[k + 1] >= LINHA_DO_NUMERO && pareceTexto(px, i)) continue;
-    // O fundo no pixel do slot onde este ponto do sprite caiu.
+    // O fundo no pixel do slot onde este ponto do sprite caiu, na cor da moldura.
     const fx = p[k] + melhor.dx;
     const fy = p[k + 1] + melhor.dy;
-    const f = FUNDO_DO_SLOT[Math.min(LADO - 1, Math.max(0, fy)) * LADO + Math.min(LADO - 1, Math.max(0, fx))];
-    vazio += (px[i] - f) ** 2 + (px[i + 1] - f) ** 2 + (px[i + 2] - f) ** 2;
+    const j = Math.min(LADO - 1, Math.max(0, fy)) * LADO + Math.min(LADO - 1, Math.max(0, fx));
+    const f = FUNDO_DO_SLOT[j];
+    const b = BRILHO_DA_MOLDURA[j];
+    vazio += (px[i] - f - b * m[0]) ** 2 + (px[i + 1] - f - b * m[1]) ** 2 + (px[i + 2] - f - b * m[2]) ** 2;
     n++;
   }
   if (melhor.erro > (vazio / n) * MELHORA_MINIMA) return null;
@@ -342,9 +440,9 @@ export interface Achado {
 /**
  * Junta os achados de vários prints do mesmo Stash.
  *
- * O Supply Stash guarda cada item numa pilha só (página "Your Supply Stash" do
- * wiki), então o mesmo item em dois prints é a MESMA pilha, vista duas vezes —
- * não se soma. Isso dispensa alinhar linhas entre prints, que é o que o
+ * O Stash mostra cada item num slot só, com a quantidade total — até arma e
+ * escudo, que não empilham na mochila, aparecem ali como "Crown Shield 3". O
+ * mesmo item em dois prints é o MESMO slot, visto duas vezes — não se soma. Isso dispensa alinhar linhas entre prints, que é o que o
  * stash.kefu.ovh faz e pode errar.
  *
  * Quando os dois prints discordam da quantidade (OCR errou num deles), fica o
@@ -444,8 +542,8 @@ export function acharTitulo(img: Rgba): { x: number; y: number } | null {
 
 /**
  * Molduras de slot dentro de `area`. A moldura, medida: linha escura (17) em
- * cima e à esquerda, e logo dentro um quadrado claro (131) de 32×32 — que é a
- * área do sprite. Devolve o canto do quadrado claro.
+ * cima e à esquerda, e logo dentro um quadrado de 32×32 na cor da moldura —
+ * que é a área do sprite. Devolve o canto de dentro.
  *
  * O Stash só desenha slot onde há item; não existe grade de slots vazios.
  */
@@ -457,20 +555,23 @@ export function acharSlots(img: Rgba, area: { x: number; y: number; largura: num
   const x1 = Math.min(W - LADO - 1, area.x + area.largura - LADO - 1);
   const y1 = Math.min(img.altura - LADO - 1, area.y + area.altura - LADO - 1);
   const escuro = (x: number, y: number) => luz(d, (y * W + x) * 4) < 40;
-  const claro = (x: number, y: number) => luz(d, (y * W + x) * 4) > 100;
+  const claro = (x: number, y: number) => ehMoldura(d, (y * W + x) * 4);
   const out: { x: number; y: number }[] = [];
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
-      if (!escuro(x, y) || !claro(x + 1, y + 1)) continue;
+      if (!escuro(x, y) || !escuro(x + 1, y) || !escuro(x, y + 1)) continue;
       // Linha escura de cima e da esquerda, inteiras.
       let ok = true;
       for (let k = 0; k <= LADO && ok; k++) ok = escuro(x + k, y) && escuro(x, y + k);
       if (!ok) continue;
-      // Quadrado claro: linha de cima e coluna da esquerda. A de baixo e a da
-      // direita levam o número por cima e não servem de prova.
+      // Moldura: linha de cima e coluna da esquerda. A de baixo e a da
+      // direita levam o número por cima e não servem de prova. O sprite pode
+      // invadir a moldura — a lâmina do Titan Axe cobre 10 dos 32 pixels de
+      // cada lado, a ponta da Mercenary Sword cobre o canto —, por isso basta
+      // a maioria; a linha escura inteira dos dois lados é que prova o slot.
       let claros = 0;
       for (let k = 1; k <= LADO; k++) claros += (claro(x + k, y + 1) ? 1 : 0) + (claro(x + 1, y + k) ? 1 : 0);
-      if (claros < 2 * LADO * 0.85) continue;
+      if (claros < 2 * LADO * MOLDURA_A_VISTA) continue;
       out.push({ x: x + 1, y: y + 1 });
       x += LADO; // o próximo slot começa pelo menos um slot adiante
     }
@@ -479,10 +580,10 @@ export function acharSlots(img: Rgba, area: { x: number; y: number; largura: num
 }
 
 /**
- * Os dígitos da quantidade, medidos no print: 8 linhas de altura, brancos com
- * contorno preto. Só existem no print os dígitos 0 1 2 3 4 5 6 9 — o 7 e o 8
- * não apareceram, e inventar o desenho deles seria chute. Dígito que não bate
- * com nenhum vira "?".
+ * Os dígitos da quantidade, medidos nos prints: 8 linhas de altura, brancos
+ * com contorno preto. O 7 e o 8 vieram do print de 2026-09-29; antes dele o 8
+ * saía "0" (só a cintura difere, e 46 de 48 pixels batiam) e o 7 saía "?".
+ * Dígito que não bate com nenhum vira "?".
  */
 const DIGITOS: Record<string, string[]> = {
   "0": [".####.", "##..##", "##..##", "##..##", "##..##", "##..##", "##..##", ".####."],
@@ -492,6 +593,8 @@ const DIGITOS: Record<string, string[]> = {
   "4": ["....#.", "...##.", "..###.", ".#.##.", "#..##.", "######", "....##", "....##"],
   "5": [".#####", ".##...", ".##...", ".####.", "....##", "....##", "##..##", ".####."],
   "6": ["..###.", ".##...", "##....", "#####.", "##..##", "##..##", "##..##", ".####."],
+  "7": ["######", "....##", "...##.", "...##.", "..##..", "..##..", ".##...", ".##..."],
+  "8": [".####.", "##..##", "##..##", ".####.", "##..##", "##..##", "##..##", ".####."],
   "9": [".####.", "##..##", "##..##", "##..##", ".#####", "....##", "...##.", ".###.."],
 };
 
@@ -516,6 +619,11 @@ export interface Quantidade {
  * 3. O resto é separado em blocos por colunas vazias, e cada bloco é comparado
  *    com os modelos, deslocado até 1 px. Bloco pequeno demais é sujeira do
  *    sprite (pixel branco que caiu na faixa).
+ * 4. Bloco que não é dígito nenhum e mostra sinal de sprite sai: branco nas
+ *    linhas logo ACIMA dos dígitos (dígito nunca sobe além da linha 21 — o
+ *    cabo do Butcher's Axe sobe), ou branco sem o contorno preto que a fonte
+ *    sempre tem (o reflexo da Steel Boots). Sem essa prova, bloco desconhecido
+ *    continua "?", e a quantidade fica sem valor.
  */
 export function lerQuantidade(img: Rgba, sx: number, sy: number): Quantidade {
   const W = img.largura;
@@ -532,6 +640,24 @@ export function lerQuantidade(img: Rgba, sx: number, sy: number): Quantidade {
     colunas.push(col);
   }
   const abaixo = (c: boolean[]) => c.slice(DIGITO_ALTURA).some(Boolean);
+  const acimaDosDigitos = (x: number) => [1, 2, 3].some((k) => branco(sx + x, sy + DIGITO_TOPO - k));
+  const preto = (x: number, y: number) => luz(d, (y * W + x) * 4) < 40;
+  /** Fração dos pixels brancos do bloco cujos 4 vizinhos são branco ou preto. */
+  const contornado = (bloco: number[]) => {
+    let brancos = 0;
+    let bons = 0;
+    for (const x of bloco) {
+      for (let y = DIGITO_TOPO; y < DIGITO_TOPO + DIGITO_ALTURA; y++) {
+        if (!branco(sx + x, sy + y)) continue;
+        brancos++;
+        const viz = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(
+          ([dx, dy]) => branco(sx + x + dx, sy + y + dy) || preto(sx + x + dx, sy + y + dy),
+        );
+        if (viz) bons++;
+      }
+    }
+    return brancos === 0 ? 0 : bons / brancos;
+  };
   const nosDigitos = (c: boolean[]) => c.slice(0, DIGITO_ALTURA).some(Boolean);
 
   const blocos: number[][] = [];
@@ -574,6 +700,7 @@ export function lerQuantidade(img: Rgba, sx: number, sy: number): Quantidade {
         }
       }
     }
+    if (melhor === "?" && (bloco.some(acimaDosDigitos) || contornado(bloco) < 0.8)) continue;
     texto += melhor;
   }
   if (texto === "") return { valor: 1, texto: "" };
@@ -685,7 +812,7 @@ function lerComTitulo(img: Rgba, t: { x: number; y: number }, sprites: readonly 
 
   const W = img.largura;
   const escuro = (x: number, y: number) => luz(img.dados, (y * W + x) * 4) < 40;
-  const claro = (x: number, y: number) => luz(img.dados, (y * W + x) * 4) > 100;
+  const claro = (x: number, y: number) => ehMoldura(img.dados, (y * W + x) * 4);
 
   const slots: SlotLido[] = [];
   for (let sy = lista.y + LISTA.margem + fase - LISTA.passo; sy <= pe; sy += LISTA.passo) {
@@ -708,7 +835,7 @@ function lerComTitulo(img: Rgba, t: { x: number; y: number }, sprites: readonly 
           if (claro(sx, y)) claros++;
         }
         const h = v1 - v0 + 1;
-        if (escuros < h || claros < h * 0.7) continue;
+        if (escuros < h || claros < h * MOLDURA_A_VISTA) continue;
       }
       const r = reconhecerSlot(img, sx, sy, sprites, { y0: v0, y1: v1 });
       // O número ocupa as linhas 21 a 31 do slot: só se lê se estiverem à vista.

@@ -17,21 +17,35 @@
  *   do Davi em 2026-09-28, sabendo que ler os arquivos internos do cliente pode
  *   esbarrar no contrato de serviço da CipSoft: os CDNs dos dois wikis barram
  *   script com a Cloudflare, e burlar isso estava fora de questão.
- * - **Dados de cada item** (`npcvalue`, `sellto`, `imbuements`): o infobox do
+ * - **Preço de NPC e quem compra:** também do cliente — as `npcsaledata` do
+ *   `appearances.dat` trazem cada NPC com o preço que ele PAGA. O valor é o
+ *   maior deles; "Yasir" na lista marca o item que ele compra.
+ * - **Imbuement e o título do wiki:** o infobox dos itens empilháveis do
  *   TibiaWiki (fandom), pela API MediaWiki, 50 páginas por chamada. A junção
- *   com o cliente é pelo `itemid`, não pelo nome.
+ *   com o cliente é pelo `itemid`, não pelo nome. Item sem página ali (todo
+ *   não empilhável) leva o nome do cliente em `tituloDeItem`.
  * - **Delivery Tasks** (mínimo e máximo exigidos): a página "Delivery Task".
  *
- * O Supply Stash só aceita item empilhável (página "Your Supply Stash" do
- * wiki). No cliente, empilhável é a flag 6 (`cumulative`) do `appearances.dat`.
+ * ## Que itens entram
+ *
+ * Desde a 14.10 (Winter Update 2024), o Stash aceita todo item "em estado de
+ * loja": negociável no Market, sem tier e sem imbuement, anel e amuleto com a
+ * carga inteira; containers ficam fora. Até então só empilhável entrava — a
+ * primeira versão desta base seguia essa regra velha, e um print com machados
+ * e escudos saiu cheio de slot sem item. No cliente, "negociável" é o campo 36
+ * (`market`) com `trade_as_object_id` apontando para o próprio item (as
+ * variantes — anel equipado, por exemplo — apontam para a forma de loja), e
+ * container é a flag 5.
  *
  * ## Formato dos arquivos do cliente
  *
- * - `appearances-*.dat` é protobuf. Só três campos importam: `Appearance.id`
- *   (1), o `SpriteInfo` dentro do `FrameGroup` (2 → 3, com `sprite_id` no 5) e
- *   o nome (4). Um item empilhável tem padrão 4×2 = 8 sprites, um por faixa de
- *   pilha (1, 2, 3, 4, 5, 10, 25, 50): o Stash mostra o da pilha que você tem,
- *   então TODOS entram no atlas, sem repetir os iguais.
+ * - `appearances-*.dat` é protobuf. Importam `Appearance.id` (1), o
+ *   `SpriteInfo` dentro do `FrameGroup` (2 → 3, com `sprite_id` no 5), o nome
+ *   (4) e, nas flags (3): 5 container, 36 market (2 = trade_as) e 40
+ *   npcsaledata (1 = NPC, 4 = preço que ele paga). Um item empilhável tem
+ *   padrão 4×2 = 8 sprites, um por faixa de pilha (1, 2, 3, 4, 5, 10, 25, 50): o
+ *   Stash mostra o da pilha que você tem, então TODOS entram no atlas, sem
+ *   repetir os iguais. Item animado entra com todos os quadros.
  * - `sprites-*.bmp.lzma`: 24 bytes zerados, a assinatura `70 0a fa 80 24`, o
  *   tamanho comprimido em varint e um LZMA1 cujo cabeçalho traz o tamanho
  *   COMPRIMIDO onde o formato `.lzma` padrão espera o descomprimido — daí o
@@ -44,6 +58,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import sharp from "sharp";
+import { tituloDeItem } from "../lib/nomesDeItem.ts";
 
 const ASSETS =
   process.env.TIBIA_ASSETS ?? `${homedir()}/.local/share/CipSoft GmbH/Tibia/packages/Tibia/assets`;
@@ -121,23 +136,39 @@ interface ItemDoCliente {
   id: number;
   nome: string;
   sprites: number[];
+  /** O maior preço que um NPC paga; 0 = nenhum compra. */
+  npc: number;
+  yasir: boolean;
 }
 
-function empilhaveisDoCliente(dat: Uint8Array): ItemDoCliente[] {
+const texto = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) : "");
+
+/** Os itens que o Stash aceita: negociáveis no Market, forma de loja, sem container. */
+function itensDoCliente(dat: Uint8Array): ItemDoCliente[] {
   const out: ItemDoCliente[] = [];
   for (const topo of campos(dat)) {
     if (topo.n !== 1 || !topo.bytes) continue; // 1 = objetos; 2..4 são outfit, efeito, míssil
     const obj = campos(topo.bytes);
-    const flags = obj.find((c) => c.n === 3)?.bytes;
-    if (!flags || !campos(flags).some((c) => c.n === 6 && c.varint === 1)) continue;
-    const nome = obj.find((c) => c.n === 4)?.bytes;
+    const id = obj.find((c) => c.n === 1)!.varint!;
+    const flags = campos(obj.find((c) => c.n === 3)?.bytes ?? new Uint8Array());
+    const market = flags.find((c) => c.n === 36)?.bytes;
+    if (!market || campos(market).find((c) => c.n === 2)?.varint !== id) continue;
+    if (flags.some((c) => c.n === 5)) continue;
+    const nome = texto(obj.find((c) => c.n === 4)?.bytes);
     if (!nome) continue;
+    let npc = 0;
+    let yasir = false;
+    for (const venda of flags.filter((c) => c.n === 40 && c.bytes)) {
+      const v = campos(venda.bytes!);
+      npc = Math.max(npc, v.find((c) => c.n === 4)?.varint ?? 0);
+      if (texto(v.find((c) => c.n === 1)?.bytes) === "Yasir") yasir = true;
+    }
     const sprites: number[] = [];
     for (const grupo of obj.filter((c) => c.n === 2 && c.bytes)) {
       const info = campos(grupo.bytes!).find((c) => c.n === 3)?.bytes;
       if (info) sprites.push(...inteiros(campos(info), 5));
     }
-    out.push({ id: obj.find((c) => c.n === 1)!.varint!, nome: new TextDecoder().decode(nome), sprites });
+    out.push({ id, nome, sprites, npc, yasir });
   }
   return out;
 }
@@ -197,7 +228,7 @@ function abrirFolha(arquivo: string): Uint8Array {
   return rgba;
 }
 
-/** Recorta um sprite 32×32 da folha (só folhas do tipo 0, de sprites 32×32). */
+/** Recorta um sprite 32×32 da folha (folhas do tipo 0, de sprites 32×32). */
 function recortar(folha: Uint8Array, indice: number): Buffer {
   const cx = (indice % 12) * LADO;
   const cy = Math.floor(indice / 12) * LADO;
@@ -205,6 +236,35 @@ function recortar(folha: Uint8Array, indice: number): Buffer {
   for (let y = 0; y < LADO; y++) {
     const s = ((cy + y) * 384 + cx) * 4;
     out.set(folha.subarray(s, s + LADO * 4), y * LADO * 4);
+  }
+  return out;
+}
+
+/**
+ * Recorta um sprite 64×64 (folha do tipo 3, 6×6 por folha) já reduzido a
+ * 32×32, pela média de cada bloco 2×2 ponderada pelo alpha. O slot tem 32 px e
+ * o cliente encolhe o item grande para caber; COMO ele encolhe não foi medido
+ * (nenhum print trouxe item assim) — se o filtro dele for outro, esses ~80
+ * itens só deixam de ser reconhecidos, não viram outro item.
+ */
+function recortarGrande(folha: Uint8Array, indice: number): Buffer {
+  const cx = (indice % 6) * 64;
+  const cy = Math.floor(indice / 6) * 64;
+  const out = Buffer.alloc(LADO * LADO * 4);
+  for (let y = 0; y < LADO; y++) {
+    for (let x = 0; x < LADO; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const s = ((cy + 2 * y + oy) * 384 + cx + 2 * x + ox) * 4;
+        const al = folha[s + 3];
+        r += folha[s] * al;
+        g += folha[s + 1] * al;
+        b += folha[s + 2] * al;
+        a += al;
+      }
+      const d = (y * LADO + x) * 4;
+      if (a > 0) out.set([Math.round(r / a), Math.round(g / a), Math.round(b / a), Math.round(a / 4)], d);
+    }
   }
   return out;
 }
@@ -337,11 +397,11 @@ async function main() {
     lastspriteid?: number;
   }[];
   const dat = readFileSync(`${ASSETS}/${catalogo.find((e) => e.type === "appearances")!.file}`);
-  const doCliente = empilhaveisDoCliente(dat);
+  const doCliente = itensDoCliente(dat);
   const folhas: Folha[] = catalogo
     .filter((e) => e.type === "sprite")
     .map((e) => ({ arquivo: e.file, tipo: e.spritetype!, primeiro: e.firstspriteid!, ultimo: e.lastspriteid! }));
-  console.log(`  ${doCliente.length} itens empilháveis com nome`);
+  console.log(`  ${doCliente.length} itens negociáveis no Market (sem container)`);
 
   console.log("2/4 dados de cada item (TibiaWiki) ...");
   const doWiki = await dadosDoWiki();
@@ -363,12 +423,14 @@ async function main() {
     for (const id of it.sprites) {
       const f = folhas.find((x) => x.primeiro <= id && id <= x.ultimo);
       if (!f) continue;
-      if (f.tipo !== 0) {
-        foraDoPadrao++; // o Stash desenha 32×32; sprite maior é raríssimo em empilhável
+      // 1 e 2 são 32×64 e 64×32: dois itens de Market no jogo todo, não valem o código.
+      if (f.tipo !== 0 && f.tipo !== 3) {
+        foraDoPadrao++;
         continue;
       }
       if (!abertas.has(f.arquivo)) abertas.set(f.arquivo, abrirFolha(f.arquivo));
-      const px = recortar(abertas.get(f.arquivo)!, id - f.primeiro);
+      const folha = abertas.get(f.arquivo)!;
+      const px = f.tipo === 0 ? recortar(folha, id - f.primeiro) : recortarGrande(folha, id - f.primeiro);
       if (!px.some((_, k) => k % 4 === 3 && px[k] > 0)) continue; // quadro vazio
       const chave = createHash("sha1").update(px).digest("hex");
       let s = porHash.get(chave);
@@ -382,10 +444,11 @@ async function main() {
     if (indices.size === 0) continue;
     const w = doWiki.get(it.id);
     if (!w) semWiki++;
-    const nome = w?.titulo ?? it.nome.replace(/(^|\s)\S/g, (l) => l.toUpperCase());
-    const flags = (w?.yasir ? 1 : 0) | (w?.imbuement ? 2 : 0);
+    const nome = w?.titulo ?? tituloDeItem(it.nome);
+    const flags = (it.yasir || w?.yasir ? 1 : 0) | (w?.imbuement ? 2 : 0);
     const [min, max] = entregas.get(nome) ?? [0, 0];
-    itens.push([nome, w?.npcvalue ?? null, flags, min, max, [...indices]]);
+    // O preço do cliente é o do jogo agora; o do wiki é o que alguém anotou.
+    itens.push([nome, it.npc || w?.npcvalue || null, flags, min, max, [...indices]]);
   }
   console.log(`  ${abertas.size} folhas abertas`);
 
@@ -422,7 +485,7 @@ export const COMPRA_YASIR = 1;
 export const IMBUEMENT = 2;
 
 /**
- * Um item empilhável: \`[nome, npcvalue, flags, deliveryMin, deliveryMax, sprites]\`.
+ * Um item que o Stash aceita: \`[nome, npcvalue, flags, deliveryMin, deliveryMax, sprites]\`.
  *
  * Tupla, e não objeto, porque são ${itens.length} itens e o arquivo vai para o
  * navegador. \`npcvalue\` nulo é "sem referência", não zero. \`deliveryMin\` 0 é
@@ -442,8 +505,8 @@ export const ITENS_DO_STASH: readonly ItemDoStash[] = ${JSON.stringify(itens)};
   const naoAchados = [...entregas.keys()].filter((n) => !itens.some((it) => it[0] === n));
   console.log(`\n${itens.length} itens, ${sprites.length} sprites, atlas ${COLUNAS * LADO}×${linhas * LADO}`);
   console.log(`${(atlas.length / 1024).toFixed(0)} KB de atlas, ${(conteudo.length / 1024).toFixed(0)} KB de dados`);
-  console.log(`${entregaveis} itens de Delivery Task empilháveis; ${naoAchados.length} de Delivery Task não aparecem (não empilham)`);
-  console.log(`${semWiki} itens do cliente sem página no wiki; ${foraDoPadrao} sprites maiores que 32×32 ignorados`);
+  console.log(`${entregaveis} itens de Delivery Task; ${naoAchados.length} de Delivery Task sem item na base: ${naoAchados.join(", ")}`);
+  console.log(`${semWiki} itens sem infobox de empilhável no wiki; ${foraDoPadrao} sprites 32×64/64×32 ignorados`);
 }
 
 main().catch((e) => {
