@@ -10,11 +10,13 @@ Referências técnicas verificadas:
 - [docs/stack.md](docs/stack.md) — limites reais dos planos gratuitos, Supabase+Next.js, RLS, Tailwind.
 - [docs/hunt-analyser.md](docs/hunt-analyser.md) — formato do Hunt Analyser e dimensionamento.
 - [docs/periodos.md](docs/periodos.md) — dia e semana do jogo (server save).
+- [docs/decisoes.md](docs/decisoes.md) — as diretrizes arquivadas, que os comentários do código citam.
 
 **Número de diretriz não se reaproveita.** Diretriz removida deixa buraco na sequência, para que uma
 referência antiga, num commit ou num comentário, nunca aponte para uma regra diferente da que ela
 citava. Em 2026-09-28 o Davi removeu todas as diretrizes restritivas, ficando só as de git e as de
-uso das APIs; o texto das removidas continua no histórico do git (`git show e875f20:AGENTS.md`).
+uso das APIs; o texto das removidas está em [docs/decisoes.md](docs/decisoes.md), como registro
+de decisões e não como regra.
 
 ## Escopo
 
@@ -121,7 +123,9 @@ node --experimental-strip-types lib/level.test.ts
 node --experimental-strip-types lib/stash.test.ts
 ```
 
-Conforme o projeto crescer, esta lista cresce junto — mantê-la atualizada aqui.
+Os testes de `lib/` também rodam de uma vez com `npm test` (o `node --test` acha todo
+`lib/*.test.ts`, então teste novo entra sozinho). Conforme o projeto crescer, esta lista cresce
+junto — mantê-la atualizada aqui.
 
 **4. Nunca commitar na branch principal direto**, nunca usar `--no-verify`, nunca `push --force`,
 e nunca reescrever histórico já publicado sem pedido explícito.

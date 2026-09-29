@@ -1,0 +1,28 @@
+Session data: From 2026-09-15, 19:34:12 to 2026-09-15, 21:25:10
+Session: 01:50h
+Raw XP Gain: 7,051,729
+XP Gain: 10,577,467
+Raw XP/h: 3,812,527
+XP/h: 5,718,723
+Loot: 2,450,488
+Supplies: 303,842
+Balance: 2,146,646
+Damage: 10,756,966
+Damage/h: 5,819,757
+Healing: 2,158,980
+Healing/h: 1,168,056
+Killed Monsters:
+  437x betrayed wraith
+  609x dark torturer
+  2x destroyer
+  257x hand of cursed fate
+  348x lost soul
+  6x plaguesmith
+Looted Items:
+  413x a great mana potion
+  3x a ruby necklace
+  87x a white pearl
+  93x a black pearl
+  143x a small diamond
+  118x a small sapphire
+  109384x a gold coin

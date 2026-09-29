@@ -3,7 +3,7 @@
  *
  * Importação de uma sessão do Hunt Analyser para o banco.
  *
- * Nasceu dentro de `app/hunts/acoes.ts` e saiu de lá quando houve duas cascas
+ * Nasceu dentro de `app/(app)/hunts/acoes.ts` e saiu de lá quando houve duas cascas
  * sobre exatamente o mesmo trabalho. Restou uma, e a separação continua boa:
  * junta aqui a conversão de fuso e o tratamento de duplicata, que dentro de um
  * arquivo de UI ficariam misturados com leitura de formulário.

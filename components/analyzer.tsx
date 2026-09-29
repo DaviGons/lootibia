@@ -19,7 +19,7 @@ function horas(segundos: number): string {
  * O analyzer de uma sessão, como o do jogo mas com o que o jogo não mostra.
  *
  * O detalhe é buscado **ao abrir**, não junto da lista: uma sessão traz dezenas
- * de itens e a tela carrega até 500 sessões (ver `app/hunts/detalhe.ts`).
+ * de itens e a tela carrega até 500 sessões (ver `app/(app)/hunts/detalhe.ts`).
  *
  * Busca uma vez por sessão e guarda: reabrir não volta ao banco. Os números de
  * uma sessão encerrada não mudam — ela é um registro do passado.
