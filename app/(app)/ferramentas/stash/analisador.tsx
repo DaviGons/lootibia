@@ -118,7 +118,10 @@ export function Analisador() {
         .map((s) => ({ item: s.item!, quantidade: s.quantidade.valor! })),
     );
     const { itens, divergentes } = juntarPrints(achados);
-    const naoReconhecidos = lidas.reduce((n, l) => n + l.slots.filter((s) => s.item === null).length, 0);
+    // Slot cortado pela rolagem sem item não é falha de leitura: mostra pouco
+    // demais para decidir. Fica à parte, em cinza, e a tela pede outro print.
+    const naoReconhecidos = lidas.reduce((n, l) => n + l.slots.filter((s) => s.item === null && !s.parcial).length, 0);
+    const cortados = lidas.reduce((n, l) => n + l.slots.filter((s) => s.item === null && s.parcial).length, 0);
     // Quantidade cortada ou ilegível só é pendência se o mesmo item não foi
     // lido inteiro em outro slot ou outro print — o Stash tem uma pilha por item.
     const lidos = new Set(itens.map((it) => it.item));
@@ -130,7 +133,7 @@ export function Analisador() {
     const comValor = itens.filter((it) => ITENS_DO_STASH[it.item][1] !== null);
     const valorNpc = comValor.reduce((t, it) => t + ITENS_DO_STASH[it.item][1]! * it.quantidade, 0);
     const semReferencia = itens.length - comValor.length;
-    return { itens, divergentes: new Set(divergentes), naoReconhecidos, semQuantidade, valorNpc, semReferencia, comValor: comValor.length };
+    return { itens, divergentes: new Set(divergentes), naoReconhecidos, cortados, semQuantidade, valorNpc, semReferencia, comValor: comValor.length };
   }, [prints]);
 
   const lendo = prints.some((p) => p.leitura === null);
@@ -197,7 +200,12 @@ export function Analisador() {
             <Numero
               rotulo="Não lidos"
               valor={inteiro.format(resultado.naoReconhecidos + resultado.semQuantidade.length)}
-              detalhe="vermelho: item; amarelo: quantidade cortada ou ilegível"
+              detalhe={
+                "vermelho: item; amarelo: quantidade cortada ou ilegível" +
+                (resultado.cortados
+                  ? `; ${resultado.cortados} na linha cortada pela rolagem (cinza): role a lista e mande outro print com ela inteira`
+                  : "")
+              }
             />
             <Numero
               rotulo="Valor de NPC"
@@ -274,7 +282,9 @@ function Miniatura({ print, aoRemover }: { print: Print; aoRemover: () => void }
     ctx.drawImage(print.bitmap, j.x, j.y, j.largura, j.altura, 0, 0, j.largura, j.altura);
     ctx.lineWidth = 2 * l.escala;
     for (const s of l.slots) {
-      ctx.strokeStyle = s.item === null ? "#ef4444" : s.quantidade.valor === null ? "#f59e0b" : "#22c55e";
+      const cortadoSemItem = s.item === null && s.parcial;
+      ctx.strokeStyle = cortadoSemItem ? "#9ca3af" : s.item === null ? "#ef4444" : s.quantidade.valor === null ? "#f59e0b" : "#22c55e";
+      ctx.setLineDash(cortadoSemItem ? [4 * l.escala, 3 * l.escala] : []);
       ctx.strokeRect(s.x - j.x - l.escala, s.y - j.y - l.escala, 34 * l.escala, 34 * l.escala);
     }
   }, [l, print.bitmap]);

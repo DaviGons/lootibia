@@ -301,6 +301,34 @@ console.log("== print com molduras coloridas e itens não empilháveis (2026-09-
   ok("Opal: 500 gp no NPC, do cliente", opal[1], 500);
 }
 
+console.log("== print de outra máquina: título espaçado e número 1 px abaixo (2026-10-06)");
+{
+  // O primeiro print de outra pessoa. Nada lia: o "Stash" do título vinha com
+  // as letras 1 px mais afastadas e a janela não era achada. Achada a janela,
+  // 186 de 240 quantidades viravam "1" (os dígitos começam na linha 22, não na
+  // 21), o sprite claro encostado no número comia dígitos ("163" → "13") e o
+  // Bulltaur Horn, fino, não tinha 60% "à vista". Os 220 slots inteiros foram
+  // conferidos um a um contra o print; a leitura esperada está no .json.
+  const { readFileSync } = await import("node:fs");
+  const esperado = JSON.parse(readFileSync("test/fixtures/stash/2026-10-06-stash-espacado.json", "utf8")) as {
+    inteiros: [string, number][];
+    cortados: number;
+    cortadosLidos: string[];
+  };
+  const p = await sharp("test/fixtures/stash/2026-10-06-stash-espacado.png").ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const l = lerPrint({ largura: p.info.width, altura: p.info.height, dados: p.data }, sprites);
+  const inteiros = nomesEQuantidades({ ...l, slots: l.slots.filter((s) => !s.parcial) });
+  ok("título espaçado achado", l.janela !== null, true);
+  ok("220 slots inteiros", inteiros.length, esperado.inteiros.length);
+  const errados = esperado.inteiros
+    .map((e, i) => [e, inteiros[i]])
+    .filter(([e, r]) => JSON.stringify(e) !== JSON.stringify(r))
+    .map(([e, r]) => `${JSON.stringify(e)} -> ${JSON.stringify(r)}`);
+  ok("os 220 itens e quantidades, na ordem", errados.slice(0, 5), []);
+  const cortados = l.slots.filter((s) => s.parcial);
+  ok("linha cortada: 20 slots, nenhum vira item errado", [cortados.length, cortados.filter((s) => s.item !== null).map((s) => ITENS_DO_STASH[s.item!][0])], [esperado.cortados, esperado.cortadosLidos]);
+}
+
 console.log("== juntar prints");
 ok(
   "mesmo item em dois prints não soma",

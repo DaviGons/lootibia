@@ -225,6 +225,30 @@ function pareceTexto(d: Uint8ClampedArray | Uint8Array, i: number): boolean {
   return (r > 170 && g > 170 && b > 170 && Math.abs(r - g) < 8 && Math.abs(g - b) < 8) || (r < 14 && g < 14 && b < 14);
 }
 
+/** Erro máximo (3 canais ao quadrado) para um ponto da faixa do número contar como do sprite. */
+const IGUAL_AO_SPRITE = 3 * 12 * 12;
+
+/**
+ * Como o ponto `k` do sprite, caído no pixel `i` do print, entra na conta:
+ * - `"conta"`: ponto comum, entra no erro;
+ * - `"so-a-vista"`: na faixa do número, parece texto mas bate com o sprite —
+ *   prova que o sprite está ali, mas fica fora do erro;
+ * - `"fora"`: na faixa do número, é texto por cima do sprite.
+ *
+ * A primeira versão pulava todo pixel preto ou branco da faixa, e o contorno
+ * preto do PRÓPRIO sprite ia junto: o Bulltaur Horn, fino e descendo até o
+ * número, ficava com 51% à vista, abaixo de `VISIVEL_MINIMO`, e saía sem item
+ * apesar de 92 pontos iguais e nenhum diferente. Esses pontos contam para a
+ * vista e não para o erro: no erro, dariam vantagem a quem tem contorno preto
+ * exatamente onde o número passa (o teste sintético trocou Silver Rune Emblem
+ * por Soulfire Rune assim).
+ */
+function papelDoPonto(p: Int16Array, k: number, px: Uint8ClampedArray | Uint8Array, i: number): "conta" | "so-a-vista" | "fora" {
+  if (p[k + 1] < LINHA_DO_NUMERO || !pareceTexto(px, i)) return "conta";
+  const e = (px[i] - p[k + 2]) ** 2 + (px[i + 1] - p[k + 3]) ** 2 + (px[i + 2] - p[k + 4]) ** 2;
+  return e <= IGUAL_AO_SPRITE ? "so-a-vista" : "fora";
+}
+
 /** Um sprite do atlas, pré-digerido para comparar rápido. */
 export interface SpritePreparado {
   /** Índice do item dono deste sprite. */
@@ -374,6 +398,7 @@ export function reconhecerSlot(
     for (const [dx, dy] of DESLOCAMENTOS) {
       let soma = 0;
       let n = 0;
+      let aVista = 0;
       let perdeu = false;
       for (let k = 0; k < p.length; k += 5) {
         const x = sx + p[k] + dx;
@@ -381,7 +406,9 @@ export function reconhecerSlot(
         if (x < 0 || y < Y0 || x >= W || y >= H) continue;
         const i = (y * W + x) * 4;
         // O número desenhado por cima do sprite não é o sprite.
-        if (p[k + 1] >= LINHA_DO_NUMERO && pareceTexto(px, i)) continue;
+        const papel = papelDoPonto(p, k, px, i);
+        if (papel !== "fora") aVista++;
+        if (papel !== "conta") continue;
         const er = px[i] - p[k + 2];
         const eg = px[i + 1] - p[k + 3];
         const eb = px[i + 2] - p[k + 4];
@@ -395,7 +422,7 @@ export function reconhecerSlot(
       }
       // Entre o número por cima e a rolagem cortando, pelo menos 60% do
       // sprite tem de estar à vista; menos que isso não decide.
-      if (perdeu || n < total * VISIVEL_MINIMO) continue;
+      if (perdeu || n === 0 || aVista < total * VISIVEL_MINIMO) continue;
       const erro = soma / n;
       if (erro < limite) {
         limite = erro;
@@ -417,7 +444,7 @@ export function reconhecerSlot(
     const y = sy + p[k + 1] + melhor.dy;
     if (x < 0 || y < Y0 || x >= W || y >= H) continue;
     const i = (y * W + x) * 4;
-    if (p[k + 1] >= LINHA_DO_NUMERO && pareceTexto(px, i)) continue;
+    if (papelDoPonto(p, k, px, i) !== "conta") continue;
     // O fundo no pixel do slot onde este ponto do sprite caiu, na cor da moldura.
     const fx = p[k] + melhor.dx;
     const fy = p[k + 1] + melhor.dy;
@@ -494,9 +521,29 @@ const TITULO = [
   "#...##..##...##..##....##.##..##",
   ".####....###..#####.####..##..##",
 ];
-const TITULO_TEXTO: [number, number][] = [];
-const TITULO_FUNDO: [number, number][] = [];
-TITULO.forEach((linha, y) => [...linha].forEach((c, x) => (c === "#" ? TITULO_TEXTO : TITULO_FUNDO).push([x, y])));
+
+/**
+ * As cinco letras do título, pelas colunas que ocupam em `TITULO`. O espaço
+ * entre elas varia: no print de 2026-10-06 (`exemplos/`, outra máquina) o "s"
+ * e o "h" vêm 1 px mais à direita cada um, e a palavra tem 34 px em vez de 32.
+ * Com o molde inteiro de uma vez, a janela não era achada e o print não lia
+ * nada. Cada letra é procurada com até `FOLGA_ENTRE_LETRAS` px a mais.
+ */
+const LETRAS_DO_TITULO: { texto: [number, number][]; fundo: [number, number][] }[] = [
+  [0, 5],
+  [7, 11],
+  [13, 18],
+  [20, 24],
+  [26, 31],
+].map(([c0, c1]) => {
+  const texto: [number, number][] = [];
+  const fundo: [number, number][] = [];
+  TITULO.forEach((linha, y) => {
+    for (let x = c0; x <= c1; x++) (linha[x] === "#" ? texto : fundo).push([x, y]);
+  });
+  return { texto, fundo };
+});
+const FOLGA_ENTRE_LETRAS = 2;
 
 /**
  * A lista de itens, medida a partir do canto do título: a borda escura dela
@@ -518,23 +565,43 @@ export function acharTitulo(img: Rgba): { x: number; y: number } | null {
   const W = img.largura;
   const H = img.altura;
   const d = img.dados;
-  const [ax, ay] = TITULO_TEXTO[0];
+  const [ax, ay] = LETRAS_DO_TITULO[0].texto[0];
+  const largura = TITULO[0].length + FOLGA_ENTRE_LETRAS * (LETRAS_DO_TITULO.length - 1);
+  /** Contraste da letra `l` com o canto em (`x`, `y`): o pior texto e o pior fundo. */
+  const letra = (l: number, x: number, y: number): [number, number] => {
+    let minTexto = 255;
+    for (const [tx, ty] of LETRAS_DO_TITULO[l].texto) {
+      minTexto = Math.min(minTexto, luz(d, ((y + ty) * W + x + tx) * 4));
+      if (minTexto < 110) return [minTexto, 255];
+    }
+    let maxFundo = 0;
+    for (const [fx, fy] of LETRAS_DO_TITULO[l].fundo) {
+      maxFundo = Math.max(maxFundo, luz(d, ((y + fy) * W + x + fx) * 4));
+      if (maxFundo > minTexto - 40) break;
+    }
+    return [minTexto, maxFundo];
+  };
   for (let y = 0; y + TITULO.length <= H; y++) {
-    for (let x = 0; x + TITULO[0].length <= W; x++) {
-      // Corte rápido: o primeiro pixel de texto tem de ser claro.
+    for (let x = 0; x + largura <= W; x++) {
+      // Corte rápido: o primeiro pixel do "S" tem de ser claro.
       if (luz(d, ((y + ay) * W + x + ax) * 4) < 110) continue;
       let minTexto = 255;
-      for (const [tx, ty] of TITULO_TEXTO) {
-        minTexto = Math.min(minTexto, luz(d, ((y + ty) * W + x + tx) * 4));
-        if (minTexto < 110) break;
-      }
-      if (minTexto < 110) continue;
       let maxFundo = 0;
-      for (const [fx, fy] of TITULO_FUNDO) {
-        maxFundo = Math.max(maxFundo, luz(d, ((y + fy) * W + x + fx) * 4));
-        if (maxFundo > minTexto - 40) break;
+      let desvio = 0;
+      let achou = true;
+      for (let l = 0; l < LETRAS_DO_TITULO.length && achou; l++) {
+        achou = false;
+        for (let e = 0; e <= (l === 0 ? 0 : FOLGA_ENTRE_LETRAS); e++) {
+          const [t, f] = letra(l, x + desvio + e, y);
+          if (t < 110 || f > t - 40) continue;
+          desvio += e;
+          minTexto = Math.min(minTexto, t);
+          maxFundo = Math.max(maxFundo, f);
+          achou = true;
+          break;
+        }
       }
-      if (maxFundo <= minTexto - 40) return { x, y };
+      if (achou && maxFundo <= minTexto - 40) return { x, y };
     }
   }
   return null;
@@ -598,10 +665,19 @@ const DIGITOS: Record<string, string[]> = {
   "9": [".####.", "##..##", "##..##", "##..##", ".#####", "....##", "...##.", ".###.."],
 };
 
-/** Linhas dos dígitos e da vírgula, contadas do topo do slot. */
+/**
+ * Linha do topo dos dígitos, contada do topo do slot, e as alternativas. No
+ * cliente dos prints de 2026-09 os dígitos ocupam as linhas 21–28 e a vírgula
+ * desce até a 31; no print de 2026-10-06 (`exemplos/`) tudo vem 1 linha abaixo
+ * (22–29). Com a linha fixa, a base do dígito caía onde só a vírgula passa, o
+ * número inteiro saía como vírgula, e 186 de 240 quantidades viraram "1".
+ * Cada slot tenta as três e fica com a que lê melhor.
+ */
 const DIGITO_TOPO = 21;
+const TOPOS_DO_NUMERO = [21, 22, 20];
 const DIGITO_ALTURA = 8;
-const VIRGULA_FUNDO = 31;
+/** A vírgula desce até 2 linhas abaixo da base dos dígitos. */
+const VIRGULA_ABAIXO = 2;
 
 export interface Quantidade {
   /** `null` quando algum dígito não foi reconhecido. */
@@ -626,6 +702,41 @@ export interface Quantidade {
  *    continua "?", e a quantidade fica sem valor.
  */
 export function lerQuantidade(img: Rgba, sx: number, sy: number): Quantidade {
+  let melhor: { texto: string; pontos: number; nota: number } | null = null;
+  for (const topo of TOPOS_DO_NUMERO) {
+    const l = lerComTopo(img, sx, sy, topo);
+    // Mais dígitos reconhecidos, menos "?"; no empate, a nota dos modelos.
+    if (!melhor || l.pontos > melhor.pontos || (l.pontos === melhor.pontos && l.nota > melhor.nota)) melhor = l;
+  }
+  const texto = melhor!.texto;
+  if (texto === "") return { valor: 1, texto: "" };
+  return { valor: texto.includes("?") ? null : Number(texto), texto };
+}
+
+/** Nota mínima (fração de pixels iguais ao molde) para aceitar um dígito. */
+const NOTA_DO_DIGITO = 0.85;
+/** Fração mínima dos brancos de um dígito com o contorno preto da fonte em volta. */
+const CONTORNO_DO_DIGITO = 0.75;
+/**
+ * Maior vão, em colunas, entre o começo de um dígito e o fim do próximo à
+ * esquerda. Os dígitos ocupam células de 7 px; o "1" é estreito e deixa até
+ * 5 colunas livres ("157"), e a vírgula soma mais 3 ("3,050").
+ */
+const VAO_ENTRE_DIGITOS = 6;
+const VAO_COM_VIRGULA = 9;
+
+/**
+ * `lerQuantidade` supondo os dígitos a partir da linha `topo` do slot.
+ *
+ * Lê da DIREITA para a esquerda, um dígito por vez: o número é alinhado à
+ * direita, e o que fica à esquerda dele é sprite. Cada passo encaixa o melhor
+ * molde onde a última coluna com texto termina, pula a vírgula e segue até não
+ * achar mais dígito. A primeira versão cortava a faixa em blocos por colunas
+ * vazias, e o sprite claro encostado no número juntava dois dígitos num bloco
+ * só: o "163" das Encrypted Notes (papel branco) saía "13", e o "524" da
+ * Glowing Rune (metal prateado), "52".
+ */
+export function lerComTopo(img: Rgba, sx: number, sy: number, topo: number): { texto: string; pontos: number; nota: number } {
   const W = img.largura;
   const d = img.dados;
   const branco = (x: number, y: number) => {
@@ -633,78 +744,81 @@ export function lerQuantidade(img: Rgba, sx: number, sy: number): Quantidade {
     const r = d[i], g = d[i + 1], b = d[i + 2];
     return r > 170 && g > 170 && b > 170 && Math.abs(r - g) < 8 && Math.abs(g - b) < 8;
   };
+  const preto = (x: number, y: number) => luz(d, (y * W + x) * 4) < 40;
   const colunas: boolean[][] = [];
   for (let x = 0; x < LADO; x++) {
     const col: boolean[] = [];
-    for (let y = DIGITO_TOPO; y <= VIRGULA_FUNDO; y++) col.push(branco(sx + x, sy + y));
+    for (let y = topo; y <= Math.min(LADO - 1, topo + DIGITO_ALTURA - 1 + VIRGULA_ABAIXO); y++) col.push(branco(sx + x, sy + y));
     colunas.push(col);
   }
-  const abaixo = (c: boolean[]) => c.slice(DIGITO_ALTURA).some(Boolean);
-  const acimaDosDigitos = (x: number) => [1, 2, 3].some((k) => branco(sx + x, sy + DIGITO_TOPO - k));
-  const preto = (x: number, y: number) => luz(d, (y * W + x) * 4) < 40;
-  /** Fração dos pixels brancos do bloco cujos 4 vizinhos são branco ou preto. */
-  const contornado = (bloco: number[]) => {
+  const tem = (x: number, y: number) => x >= 0 && x < LADO && y >= 0 && y < colunas[x].length && colunas[x][y];
+  const nosDigitos = (x: number) => colunas[x].slice(0, DIGITO_ALTURA).some(Boolean);
+  const abaixo = (x: number) => colunas[x].slice(DIGITO_ALTURA).some(Boolean);
+  const texto = (x: number) => nosDigitos(x) && !abaixo(x);
+
+  /** Fração dos brancos do retângulo cujos 4 vizinhos são branco ou preto (o contorno da fonte). */
+  const contorno = (x0: number, w: number, oy: number) => {
     let brancos = 0;
     let bons = 0;
-    for (const x of bloco) {
-      for (let y = DIGITO_TOPO; y < DIGITO_TOPO + DIGITO_ALTURA; y++) {
-        if (!branco(sx + x, sy + y)) continue;
+    for (let x = Math.max(0, x0); x < Math.min(LADO, x0 + w); x++) {
+      for (let y = 0; y < DIGITO_ALTURA; y++) {
+        const py = sy + topo + y + oy;
+        if (!branco(sx + x, py)) continue;
         brancos++;
-        const viz = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(
-          ([dx, dy]) => branco(sx + x + dx, sy + y + dy) || preto(sx + x + dx, sy + y + dy),
-        );
-        if (viz) bons++;
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => branco(sx + x + dx, py + dy) || preto(sx + x + dx, py + dy))) bons++;
       }
     }
     return brancos === 0 ? 0 : bons / brancos;
   };
-  const nosDigitos = (c: boolean[]) => c.slice(0, DIGITO_ALTURA).some(Boolean);
 
-  const blocos: number[][] = [];
-  let atual: number[] = [];
-  colunas.forEach((c, x) => {
-    const usa = nosDigitos(c) && !abaixo(c);
-    if (usa) atual.push(x);
-    else if (atual.length) {
-      blocos.push(atual);
-      atual = [];
-    }
-  });
-  if (atual.length) blocos.push(atual);
-
-  let texto = "";
-  for (const bloco of blocos) {
-    let pixels = 0;
-    for (const x of bloco) pixels += colunas[x].slice(0, DIGITO_ALTURA).filter(Boolean).length;
-    if (pixels < 8) continue;
-    let melhor = "?";
-    let melhorNota = 0.85;
+  let lido = "";
+  let notas = 0;
+  let cursor = LADO - 1;
+  while (cursor >= 0 && !texto(cursor)) cursor--;
+  let limite = LADO; // o próximo dígito tem de terminar antes do anterior começar
+  while (cursor >= 0) {
+    let melhor: { dig: string; x0: number; w: number; oy: number; nota: number } | null = null;
     for (const [dig, modelo] of Object.entries(DIGITOS)) {
       const w = modelo[0].length;
-      for (let ox = -1; ox <= bloco.length - w + 1; ox++) {
+      // O fim do dígito fica até 3 colunas antes do cursor: sprite claro
+      // encostado à direita dele (o metal da Glowing Rune) puxa o cursor.
+      for (let fim = cursor - 3; fim <= cursor + 1; fim++) {
+        const x0 = fim - w + 1;
+        if (fim >= limite || x0 < -1) continue;
         for (let oy = -1; oy <= 1; oy++) {
           let iguais = 0;
           for (let y = 0; y < DIGITO_ALTURA; y++) {
-            for (let x = 0; x < w; x++) {
-              const cx = bloco[0] + ox + x;
-              const cy = y + oy;
-              const tem = cx >= 0 && cx < LADO && cy >= 0 && cy < DIGITO_ALTURA && colunas[cx][cy];
-              if (tem === (modelo[y][x] === "#")) iguais++;
-            }
+            for (let x = 0; x < w; x++) if (tem(x0 + x, y + oy) === (modelo[y][x] === "#")) iguais++;
           }
           const nota = iguais / (w * DIGITO_ALTURA);
-          if (nota > melhorNota) {
-            melhorNota = nota;
-            melhor = dig;
-          }
+          if (!melhor || nota > melhor.nota) melhor = { dig, x0, w, oy, nota };
         }
       }
     }
-    if (melhor === "?" && (bloco.some(acimaDosDigitos) || contornado(bloco) < 0.8)) continue;
-    texto += melhor;
+    if (!melhor || melhor.nota <= NOTA_DO_DIGITO || contorno(melhor.x0, melhor.w, melhor.oy) < CONTORNO_DO_DIGITO) {
+      // Não é dígito conhecido. Se tem o contorno da fonte, é um dígito que o
+      // molde não pegou: "?", e a quantidade fica sem valor em vez de errada.
+      // Reflexo do sprite (o brilho da Spiked Iron Ball) também tem contorno
+      // escuro, mas é 1 ou 2 pixels; dígito tem pelo menos 8.
+      let brancos = 0;
+      for (let x = Math.max(0, cursor - 5); x <= cursor; x++) brancos += colunas[x].slice(0, DIGITO_ALTURA).filter(Boolean).length;
+      if (brancos >= 8 && contorno(cursor - 5, 6, 0) >= 0.8) lido = "?" + lido;
+      break;
+    }
+    lido = melhor.dig + lido;
+    notas += melhor.nota;
+    limite = melhor.x0;
+    let c = melhor.x0 - 1;
+    let virgula = false;
+    while (c >= 0 && !texto(c)) {
+      if (abaixo(c)) virgula = true;
+      c--;
+    }
+    if (c < 0 || melhor.x0 - c > (virgula ? VAO_COM_VIRGULA : VAO_ENTRE_DIGITOS)) break;
+    cursor = c;
   }
-  if (texto === "") return { valor: 1, texto: "" };
-  return { valor: texto.includes("?") ? null : Number(texto), texto };
+  const desconhecidos = lido.split("?").length - 1;
+  return { texto: lido, pontos: lido.length - 3 * desconhecidos, nota: notas };
 }
 
 export interface SlotLido {

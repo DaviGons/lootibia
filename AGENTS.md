@@ -71,9 +71,11 @@ aplicadas em produção (a `0005` e a `0006` em 2026-09-28).
   de valor (cinza, verde, azul, roxo, dourado); a cor é lida em cada slot. A janela é achada pelo
   título "Stash" em qualquer posição e tamanho de tela, a 100% ou 200% (ampliação sem suavizar); a
   altura da lista é medida no print; linha cortada pela rolagem é lida pela parte à vista (60% do
-  sprite) e a quantidade, só com o número inteiro. Limites: escala fracionária (125%, 150%) e print
-  comprimido (JPEG) não são lidos; roxo e dourado e os ~80 itens de sprite 64×64 nunca foram vistos
-  num print (o modelo cobre, mas sem prova).
+  sprite) e a quantidade, só com o número inteiro. O cliente não desenha igual em toda
+  máquina: no print de 2026-10-06 o título vem com as letras 1 px mais afastadas e o número 1 linha
+  abaixo, e os dois são procurados com folga. Limites: escala fracionária (125%, 150%) e print
+  comprimido (JPEG) não são lidos; o dourado e os ~80 itens de sprite 64×64 nunca foram vistos num
+  print (o modelo cobre, mas sem prova; o roxo apareceu em 2026-10-06 e foi lido certo).
 - **Calculadoras:** `/calculadoras/level` prevê quando o char chega a um level pelo XP/h real das
   hunts dele ([lib/level.ts](lib/level.ts)). Nasceu em `/ferramentas/level`, que redireciona.
 - **Dia do jogo:** [lib/periodo.ts](lib/periodo.ts) sabe a que dia de Tibia um instante pertence (o
